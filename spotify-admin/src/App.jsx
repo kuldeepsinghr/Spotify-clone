@@ -9,7 +9,7 @@ import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
 import 'react-toastify/dist/ReactToastify.css';
 
-export const url = 'http://localhost:5000'
+export const url = 'https://spotify-clone-backend-rctz.onrender.com'
 
 const App = () => {
 
