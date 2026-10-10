@@ -1,0 +1,19 @@
+{
+  "name": "spotify-clone",
+  "private": true,
+  "description": "Task shortcuts for the whole stack. Each app keeps its own dependencies.",
+  "scripts": {
+    "start": "docker compose up -d --build",
+    "dev": "docker compose up --build --watch",
+    "dev:tools": "docker compose --profile dev up -d",
+    "stop": "docker compose down",
+    "logs": "docker compose logs -f api",
+    "db:migrate": "docker compose exec api npx prisma migrate dev",
+    "db:reset": "docker compose exec api npx prisma migrate reset --force",
+    "db:wipe": "docker compose down -v",
+    "migrate:mongo": "npm --prefix backend run migrate:mongo --",
+    "test": "npm --prefix backend test",
+    "lint": "npm --prefix backend run lint",
+    "format": "npx prettier@3 --write backend"
+  }
+}

@@ -1,0 +1,94 @@
+# Defaults are for local development only. Override them in a root .env (see .env.example).
+name: spotify-clone
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-spotify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spotify}
+      POSTGRES_DB: ${POSTGRES_DB:-spotify}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs only when the volume is empty; creates the test database
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      target: dev
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-spotify}:${POSTGRES_PASSWORD:-spotify}@postgres:5432/${POSTGRES_DB:-spotify}?schema=public
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/v1/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    develop:
+      # `docker compose up --watch` copies edits into the container, where tsx restarts the server.
+      # This is used instead of a bind mount because file events do not cross from Windows into Linux containers.
+      watch:
+        - action: sync
+          path: ./backend/src
+          target: /app/src
+        - action: sync+restart
+          path: ./backend/prisma
+          target: /app/prisma
+        - action: rebuild
+          path: ./backend/package-lock.json
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    profiles: [dev]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - '5050:80'
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: [dev]
+    ports:
+      - '8025:8025'
+      - '1025:1025'
+
+  # Temporary: only for loading a Mongo export and running the migration script against it.
+  mongo:
+    image: mongo:7
+    profiles: [migration]
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodata:/data/db
+
+volumes:
+  pgdata:
+  pgadmin:
+  mongodata:
