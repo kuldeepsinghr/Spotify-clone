@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+
+.env
+.env.*
+!.env.example
+
+# Mongo exports and migration reports stay local; they contain catalog data
+backups/
+
+*.log
+.DS_Store
