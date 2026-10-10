@@ -1,37 +1,44 @@
-import React, { useContext, useEffect, useRef } from 'react'
+import { useContext, useEffect, useRef } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import DisplayHome from './DisplayHome'
 import DisplayAlbum from './DisplayAlbum'
+import ProtectedRoute from './ProtectedRoute'
 import { PlayerContext } from '../context/PlayerContext'
+import Profile from '../pages/Profile'
 
 const Display = () => {
-
-  const {albumData} = useContext(PlayerContext)
-
+  const { albumData } = useContext(PlayerContext)
   const displayRef = useRef()
-  const location = useLocation() // give the current location of page
-  const isAlbum = location.pathname.includes("album") // check the current location of page is /album/:id or not
-  const albumId = isAlbum ? location.pathname.split('/').pop() : "" // taking the id of album page
-  const bgcolor = isAlbum && albumData.length >0 ? albumData.find((x)=> (x._id == albumId)).bgColor : "#121212" // taking taking value of bgcolor from albumData array by its id
+  const location = useLocation()
+  const albumMatch = location.pathname.match(/^\/album\/([^/]+)$/)
+  const albumId = albumMatch?.[1] ?? ''
+  const album = albumData.find((item) => item.id === albumId)
+  const bgcolor = album?.bgColor ?? '#121212'
 
-  useEffect(()=>{
-    // if the current page location is /album/:id then change the bgcolor accordingly
-    if(isAlbum) displayRef.current.style.background = `linear-gradient(${bgcolor}, #121212)`
-    else displayRef.current.style.background = "#121212"
-  }) // every time the page render the useEffect will execute
-  
+  useEffect(() => {
+    if (!displayRef.current) return
+    displayRef.current.style.background = album
+      ? `linear-gradient(${bgcolor}, #121212)`
+      : '#121212'
+  })
+
   return (
-    <div ref={displayRef} className='w-[100%] m-2 px-6 pt-4 rounded bg-[#121212] text-white overflow-auto lg:w-[75%] lg:ml-0'>
-      {
-        albumData.length >0
-        ? <Routes>
-        <Route path='/' element={<DisplayHome/>}/>
-        <Route path='/album/:id' element={<DisplayAlbum album={albumData.find((x)=>(x._id === albumId))}/>}/>
+    <div
+      ref={displayRef}
+      className="w-[100%] m-2 px-6 pt-4 rounded bg-[#121212] text-white overflow-auto lg:w-[75%] lg:ml-0"
+    >
+      <Routes>
+        <Route path="/" element={<DisplayHome />} />
+        <Route path="/album/:id" element={<DisplayAlbum />} />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
-
-      : null
-      }
-      
     </div>
   )
 }

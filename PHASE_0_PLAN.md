@@ -379,7 +379,7 @@ Because the Mongo export is untouched and the migration is re-runnable, rollback
 | --- | --- |
 | Structure | Move all API calls into one `services` layer; use a server-state library for caching and pagination; keep `PlayerContext` only for playback |
 | Auth | Auth context holding the user and in-memory access token; automatic refresh on 401; protected routes; redirect after login |
-| New pages | Login, sign up, search, liked songs, playlist, artist, profile, 404 |
+| New pages | Login, sign up and profile are in (M6). Search, liked songs, playlist, artist and 404 remain for M7 |
 | Player | Wire up volume, mute, shuffle, repeat, queue panel, like button, keyboard shortcuts |
 | Library sidebar | Real playlists and liked songs from the API; "create playlist" button |
 | UX | Skeleton loaders, empty states, error messages, toasts, disabled states for guests with a prompt to log in |
@@ -462,10 +462,10 @@ Estimates assume part-time study (about 2 hours per day). Adjust to your pace.
 - [x] Player state endpoints (P2)
 - [x] Tests for ownership rules (a user cannot edit another user's playlist) (`test/library.int.test.ts`, plus new rows in the permission matrix)
 
-**M6: Front end authentication and admin app (about 4 days)**
-- [ ] Listener: auth context, login and sign up pages, silent refresh, protected routes
-- [ ] Admin: login, role gate, role-aware menu, ID-based dropdowns, artist and user management pages
-- [ ] Switch both apps to the `/v1` API
+**M6: Front end authentication and admin app (about 4 days)** (done)
+- [x] Listener: auth context, login and sign up pages, silent refresh, protected routes
+- [x] Admin: login, role gate, role-aware menu, ID-based dropdowns, artist and user management pages
+- [x] Switch both apps to the `/v1` API
 
 **M7: Listener features (about 8 days)**
 - [ ] Real album page and artist page

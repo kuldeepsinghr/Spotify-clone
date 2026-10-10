@@ -1,163 +1,139 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { toast } from 'react-toastify'
 import { assets } from '../assets/assets'
 import Loading from '../components/Loading'
-import axios from 'axios'
-import { url } from '../App'
-import { toast } from 'react-toastify'
+import { catalogApi } from '../api/catalog.js'
+import { apiMessage } from '../api/errors.js'
+import { useAuth } from '../context/AuthContext.jsx'
 
 const AddSong = () => {
-
-  const [image, setImage] = useState(false)
-  const [song, setSong] = useState(false)
-  const [name, setName] = useState("")
-  const [desc, setDesc] = useState("")
-  const [album, setAlbum] = useState("none")
+  const { isAdmin, user } = useAuth()
+  const [image, setImage] = useState(null)
+  const [audio, setAudio] = useState(null)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [albumId, setAlbumId] = useState('')
+  const [albums, setAlbums] = useState([])
   const [loading, setLoading] = useState(false)
-  const [albumData, setAlbumData] = useState([])
 
-  // console.log(song, image)
+  useEffect(() => {
+    const load = isAdmin
+      ? catalogApi.listAlbums()
+      : user?.artist?.id
+        ? catalogApi.albumsByArtist(user.artist.id)
+        : Promise.resolve([])
+    load.then(setAlbums).catch((error) => toast.error(apiMessage(error, 'Could not load albums')))
+  }, [isAdmin, user?.artist?.id])
 
-  const onSubmitHandler = async (e) => {
-    e.preventDefault()
-
+  const onSubmit = async (event) => {
+    event.preventDefault()
+    if (!audio) {
+      toast.error('Audio file is required')
+      return
+    }
+    if (!albumId) {
+      toast.error('Choose an album')
+      return
+    }
     setLoading(true)
     try {
       const formData = new FormData()
-
-      formData.append('name', name)
-      formData.append('desc', desc)
-      formData.append('album', album)
-      formData.append('image', image)
-      formData.append('audio', song)
-
-      const response = await axios.post(`${url}/api/song/add`, formData)
-
-      // console.log(response)
-
-      if(response.data.success){
-        toast.success("song added")
-
-        setName("")
-        setDesc("")
-        setAlbum("none")
-        setImage(false)
-        setSong(false)
-      }
-
-      else{
-        toast.error("something went wrong")
-      }
-
+      formData.append('title', title)
+      formData.append('description', description)
+      formData.append('audio', audio)
+      if (image) formData.append('image', image)
+      await catalogApi.addTrack(albumId, formData)
+      toast.success('Song added')
+      setImage(null)
+      setAudio(null)
+      setTitle('')
+      setDescription('')
+      setAlbumId('')
     } catch (error) {
-      // console.log(error)
-      toast.error("error occurred")
-      
-    }
-
-    setLoading(false)
-
-  }
-
-
-  const fetchAlbumData = async ()=>{
-    try {
-      const response = await axios.get(`${url}/api/album/list`)
-      // console.log(response.data.album)
-      setAlbumData(response.data.album)
-    } catch (error) {
-      toast.error('error')
+      toast.error(apiMessage(error, 'Could not add the song'))
+    } finally {
+      setLoading(false)
     }
   }
 
-  useEffect(()=>{
-    fetchAlbumData()
-  }, [])
-
-  return loading ? <Loading/> : (
-    <form onSubmit={onSubmitHandler} className='flex flex-col items-start gap-8 text-gray-600'>
-
-      {/* ==============Upload songs====================== */}
-      <div className='flex gap-8'>
-        <div className='flex flex-col gap-4'>
+  return loading ? (
+    <Loading />
+  ) : (
+    <form onSubmit={onSubmit} className="flex flex-col items-start gap-8 text-gray-600">
+      <div className="flex gap-8">
+        <div className="flex flex-col gap-4">
           <p>Upload song</p>
           <input
-            onChange={(e) => setSong(e.target.files[0])}
+            onChange={(e) => setAudio(e.target.files[0] ?? null)}
             type="file"
-            id='song'
-            accept='audio/*'
+            id="audio"
+            accept="audio/*"
             hidden
           />
-          <label htmlFor="song">
-            <img src={song ? assets.upload_added : assets.upload_song} alt="song" className='w-24 cursor-pointer' />
+          <label htmlFor="audio">
+            <img src={audio ? assets.upload_added : assets.upload_song} alt="" className="w-24 cursor-pointer" />
           </label>
         </div>
-
-
-        {/* ==================Upload Image======================= */}
-        <div className='flex flex-col gap-4'>
-          <p>Upload image</p>
+        <div className="flex flex-col gap-4">
+          <p>Cover (optional)</p>
           <input
-            onChange={(e) => setImage(e.target.files[0])}
+            onChange={(e) => setImage(e.target.files[0] ?? null)}
             type="file"
-            id='image'
-            accept='image/*'
+            id="image"
+            accept="image/*"
             hidden
           />
           <label htmlFor="image">
-            <img src={image ? URL.createObjectURL(image) : assets.upload_area} alt="" className='w-24 cursor-pointer' />
+            <img
+              src={image ? URL.createObjectURL(image) : assets.upload_area}
+              alt=""
+              className="w-24 cursor-pointer"
+            />
           </label>
         </div>
       </div>
 
-      {/* ==================Song Name================ */}
-      <div className='flex flex-col gap-2.5'>
-        <p>Song Name</p>
+      <div className="flex flex-col gap-2.5">
+        <p>Song title</p>
         <input
           type="text"
-          onChange={(e) => setName(e.target.value)}
-          value={name}
-          className='bg-transparent outline-green-600 border-2 border-gray-400 p-2.5 w-[max(40vw, 250px)]'
-          placeholder='type here'
           required
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="bg-transparent outline-green-600 border-2 border-gray-400 p-2.5 w-[min(40vw,28rem)]"
         />
       </div>
 
-      {/* ====================Song description============================ */}
-      <div className='flex flex-col gap-2.5'>
-        <p>Song Description</p>
+      <div className="flex flex-col gap-2.5">
+        <p>Description</p>
         <input
           type="text"
-          onChange={(e) => setDesc(e.target.value)}
-          value={desc}
-          className='bg-transparent outline-green-600 border-2 border-gray-400 p-2.5 w-[max(40vw, 250px)]'
-          placeholder='type here'
-          required
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="bg-transparent outline-green-600 border-2 border-gray-400 p-2.5 w-[min(40vw,28rem)]"
         />
       </div>
 
-
-      {/* ===========Select Album====================== */}
-      <div className='flex flex-col gap-2.5'>
+      <div className="flex flex-col gap-2.5">
         <p>Album</p>
         <select
-          onChange={(e) => setAlbum(e.target.value)}
-          defaultValue={album}
-          className='bg-transparent outline-green-600 border-2 border-gray-400 p-2.5 w-[150px]'
+          required
+          value={albumId}
+          onChange={(e) => setAlbumId(e.target.value)}
+          className="bg-transparent outline-green-600 border-2 border-gray-400 p-2.5 min-w-[16rem]"
         >
-          <option value="none">none</option>
-          {
-            albumData.map((item, index)=>{
-              return (
-                <option key={index} value={item.name}>{item.name}</option>
-              )
-            })
-          }
+          <option value="">Select an album</option>
+          {albums.map((album) => (
+            <option key={album.id} value={album.id}>
+              {album.title}
+            </option>
+          ))}
         </select>
       </div>
 
-
-      <button type='submit' className='text-base bg-black text-white py-2.5 px-14 cursor-pointer'>Add</button>
-
+      <button type="submit" className="text-base bg-black text-white py-2.5 px-14">
+        Add
+      </button>
     </form>
   )
 }

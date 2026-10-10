@@ -1,10 +1,10 @@
-import React from 'react'
 import { assets } from '../assets/assets'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext.jsx'
 
 const Sidebar = () => {
-
     const navigate = useNavigate()
+    const { signedIn } = useAuth()
 
     return (
         <div className='w-[25%] h-full p-2 flex-col gap-2 text-white hidden lg:flex'>
@@ -42,7 +42,13 @@ const Sidebar = () => {
                 <div className='p-4 bg-[#242424] m-2 rounded font-semibold flex flex-col items-start justify-start gap-1 pl-4'>
                     <h1>Create your first playlist</h1>
                     <p className='font-light'>It's easy we will help you</p>
-                    <button className='px-4 py-1 bg-white text-[15px] text-black rounded-full mt-4'>Create Playlist</button>
+                    <button
+                        type="button"
+                        onClick={() => !signedIn && navigate('/login')}
+                        className='px-4 py-1 bg-white text-[15px] text-black rounded-full mt-4'
+                    >
+                        Create Playlist
+                    </button>
                 </div>
 
                 {/* Podcast button */}

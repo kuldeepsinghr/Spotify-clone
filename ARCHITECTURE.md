@@ -124,15 +124,16 @@ Spotify-clone/
 ├── docker/                 postgres init (creates spotify_test), pgadmin server list
 ├── spotify-clone/          Listener UI
 │   └── src/
-│       ├── main.jsx        Router + PlayerContextProvider
-│       ├── App.jsx         Sidebar, Display, Player, audio element
-│       ├── context/PlayerContext.jsx
+│       ├── api/            axios client (in-memory access token, silent refresh)
+│       ├── context/        AuthContext, PlayerContext (playback only)
+│       ├── pages/          Login, Signup, Profile
 │       └── components/     Display, DisplayHome, DisplayAlbum, Player, Sidebar, Navbar
-├── spotify-admin/          Catalog admin
+├── spotify-admin/          Catalog admin (artist + admin)
 │   └── src/
-│       ├── App.jsx         Sidebar routes and API base URL
-│       ├── components/     Sidebar, Navbar
-│       └── pages/          AddSong, ListSong, AddAlbum, ListAlbum
+│       ├── api/            /v1 client, catalog and admin helpers
+│       ├── context/        AuthContext
+│       ├── components/     Sidebar (role-aware), Navbar
+│       └── pages/          Login, albums, songs, artists, users
 └── backend/
     ├── Dockerfile          dev target (tsx watch) and runtime target (compiled, non-root)
     ├── prisma/             schema and migrations
@@ -163,27 +164,26 @@ sequenceDiagram
   participant API as Express
   participant CDN as Cloudinary
 
-  UI->>Ctx: mount
-  Ctx->>API: GET /api/song/list
-  Ctx->>API: GET /api/album/list
+  UI->>Ctx: mount after auth restore
+  Ctx->>API: GET /v1/tracks and GET /v1/albums
   API-->>Ctx: songs and albums
   Ctx-->>UI: songsData, albumData, first track
   UI->>UI: render home rows
   Note over UI: user clicks a song card or an album track
-  UI->>Ctx: playWithId(id)
+  UI->>Ctx: playTrack(track)
   Ctx->>Ctx: setTrack(selected song)
-  Ctx->>CDN: audio.src = track.file
+  Ctx->>CDN: audio.src = track.audioUrl
   CDN-->>UI: audio stream
   UI->>UI: timeupdate moves the seek bar
 ```
 
 | Step | Where | What happens |
 | --- | --- | --- |
-| 1 | `main.jsx` | Wraps the tree in `BrowserRouter` and `PlayerContextProvider`. |
-| 2 | `PlayerContext` | Loads both lists and sets the first song as `track`. |
-| 3 | `App` | After songs arrive, renders the sidebar, display, player, and a hidden `<audio>` tag. |
+| 1 | `main.jsx` | `BrowserRouter`, `AuthProvider`, `PlayerContextProvider`. |
+| 2 | `AuthContext` | Restores the session from the refresh cookie; access token stays in memory. |
+| 3 | `PlayerContext` | Loads `/v1` catalogs after auth is ready and sets the first song as `track`. |
 | 4 | `/` | Albums in “Featured Charts”. Songs in “Today's biggest hits”. |
-| 5 | `/album/:id` | Gradient from `bgColor`. Track list filtered by album name. Row click calls `playWithId`. |
+| 5 | `/album/:id` | Gradient from `bgColor`. Tracks from `GET /v1/albums/:id/tracks`. |
 | 6 | `Player` | Play, pause, next, previous, and seek drive the audio element. |
 
 ## Upload
@@ -197,9 +197,9 @@ sequenceDiagram
   participant CDN as Cloudinary
   participant DB as PostgreSQL
 
-  Admin->>API: name, desc, album name, image, audio
-  API->>DB: find exactly one album with that name
-  API->>CDN: image as image, audio as video
+  Admin->>API: title, description, audio, Bearer token
+  API->>DB: confirm the actor can manage the album
+  API->>CDN: optional image, audio as video
   CDN-->>API: secure_url and duration
   API->>DB: insert track (duration_ms, next track_number)
   DB-->>Admin: 201, success true
@@ -207,10 +207,12 @@ sequenceDiagram
 
 | Admin route | Page | API |
 | --- | --- | --- |
-| `/add-album` | `AddAlbum` | `POST /api/album/add` |
-| `/list-album` | `ListAlbum` | `GET /api/album/list`, `POST /api/album/remove` |
-| `/add-song` | `AddSong` | `POST /api/song/add` |
-| `/list-song` | `ListSong` | `GET /api/song/list`, `POST /api/song/remove` |
+| `/add-album` | `AddAlbum` | `POST /v1/albums` |
+| `/list-album` | `ListAlbum` | `GET /v1/albums`, `DELETE /v1/albums/:id` |
+| `/add-song` | `AddSong` | `POST /v1/albums/:id/tracks` |
+| `/list-song` | `ListSong` | `GET /v1/tracks`, `DELETE /v1/tracks/:id` |
+| `/add-artist`, `/list-artist` | admin | `POST /v1/artists`, `GET /v1/artists`, `DELETE /v1/artists/:id` |
+| `/users` | admin | `GET /v1/admin/users`, role and status patches |
 
 Deleting a song or album removes the database row and leaves the Cloudinary file in place.
 
@@ -219,8 +221,8 @@ Deleting a song or album removes the database row and leaves the Cloudinary file
 | Question | Decision |
 | --- | --- |
 | Backend language | TypeScript |
-| Can guests play music? | 30-second preview through Cloudinary's `du_30` transformation on every `/v1` track response. Legacy lists keep full URLs until M6. Not DRM: the full file stays public until Phase 2. |
-| Legacy write routes once accounts exist | Admin only (the old admin app regains writes when it gets sign-in in M6) |
+| Can guests play music? | 30-second preview through Cloudinary's `du_30` transformation on every `/v1` track response. Both apps now call `/v1`. Not DRM: the full file stays public until Phase 2. |
+| Legacy write routes once accounts exist | Still admin-only on `/api`; the admin app writes through `/v1` since M6 |
 | Refresh token storage | httpOnly cookie scoped to `/v1/auth`; rotated on every use; stored as an HMAC so a database leak alone cannot replay tokens |
 | Deleting an album that has tracks | Blocked with 409 `ALBUM_HAS_TRACKS` |
 | Old songs without an artist | Placeholder "Unknown Artist", fixed later in the admin app |

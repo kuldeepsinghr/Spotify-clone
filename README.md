@@ -97,7 +97,7 @@ flowchart TB
 
 ## How the listener works
 
-`PlayerContext` is the single source of playback state. On mount it loads the catalog, then the rest of the UI reads that context.
+`AuthContext` holds the signed-in user. The access token stays in memory; a silent `POST /v1/auth/refresh` on load (and again after a 401) uses the httpOnly cookie. `PlayerContext` is only for playback: it loads `/v1` albums and tracks after auth is ready so guests get preview URLs and signed-in listeners get the full track.
 
 ```mermaid
 sequenceDiagram
@@ -106,44 +106,43 @@ sequenceDiagram
   participant API as Express
   participant CDN as Cloudinary
 
-  UI->>Ctx: mount
-  Ctx->>API: GET /api/song/list
-  Ctx->>API: GET /api/album/list
-  API-->>Ctx: songs and albums
+  UI->>Ctx: mount after auth is ready
+  Ctx->>API: GET /v1/tracks and GET /v1/albums
+  API-->>Ctx: tracks (preview or full audio) and albums
   Ctx-->>UI: songsData, albumData, first track
   UI->>UI: render home rows
   Note over UI: user clicks a song card or an album track
-  UI->>Ctx: playWithId(id)
+  UI->>Ctx: playTrack(track)
   Ctx->>Ctx: setTrack(selected song)
-  Ctx->>CDN: audio.src = track.file
+  Ctx->>CDN: audio.src = track.audioUrl
   CDN-->>UI: audio stream
   UI->>UI: timeupdate moves the seek bar
 ```
 
-1. `main.jsx` wraps the app in `BrowserRouter` and `PlayerContextProvider`.
-2. The provider calls `GET /api/song/list` and `GET /api/album/list`, stores both arrays, and selects the first song as `track`.
-3. `App` stays on a loading message until `songsData` has items. It then renders the sidebar, the main display (95% height), and the bottom player. A hidden `<audio>` element holds `track.file`.
+1. `main.jsx` wraps the app in `BrowserRouter`, `AuthProvider` and `PlayerContextProvider`.
+2. Auth restores the session with `POST /v1/auth/refresh`. The catalog then loads from `/v1`. Guests hear a 30-second preview when Cloudinary can trim the file.
+3. `/login` and `/signup` create a session. `/profile` is signed-in only. The navbar shows Log in / Sign up or the account initial and Log out.
 4. **Home (`/`)** shows albums under “Featured Charts” and songs under “Today's biggest hits”.
-5. Clicking an album navigates to `/album/:id`. `Display` paints a gradient from that album’s `bgColor` into `#121212`. The page lists songs whose `album` field matches the album name. Clicking a row calls `playWithId`.
-6. Changing `track` sets `audio.src` and calls `play()`. Play and pause toggle the element. Next and previous walk `songsData` by index. Clicking the seek bar sets `currentTime` from the click position. A `timeupdate` listener writes elapsed time and the green progress width.
+5. `/album/:id` loads that album and its tracks from `/v1`. The display paints a gradient from `bgColor`. A row click plays that track.
+6. Changing `track` sets `audio.src` to `audioUrl` and calls `play()`. Next and previous walk the home track list. The seek bar still sets `currentTime`.
 
-The sidebar Home control returns to `/`. Search, library, playlist, and podcast blocks are layout only. Shuffle, loop, and the volume icons in the player are layout only.
+Search, library, playlist, and player extras (shuffle, volume, likes) are still layout only until M7.
 
 ## How the admin works
 
-The admin shell is a sidebar plus four routes. Every write sends `multipart/form-data`. Toasts report success and failure.
+The admin app signs in against `/v1/auth`. Only `artist` and `admin` accounts get past the gate. Artists see catalog pages for their own profile; admins also see artist and user management. Writes use `/v1` and album/artist **IDs** in the dropdowns.
 
 ```mermaid
 sequenceDiagram
   participant Admin as Add Song form
-  participant API as POST /api/song/add
+  participant API as POST /v1/albums/:id/tracks
   participant Multer as Multer
   participant CDN as Cloudinary
   participant DB as PostgreSQL
 
-  Admin->>API: name, desc, album, image, audio
+  Admin->>API: title, description, audio, optional image, Bearer token
+  API->>API: check artist or admin owns the album
   API->>Multer: check type and size, save to temp folder
-  API->>DB: resolve album name to one album ID
   Multer->>CDN: image as image, audio as video
   CDN-->>API: secure_url and duration
   API->>DB: insert track (duration in ms, next track number)
@@ -153,10 +152,12 @@ sequenceDiagram
 
 | Route | Page | What it does |
 | --- | --- | --- |
-| `/add-album` | `AddAlbum` | Name, description, background color, cover image. `POST /api/album/add`. |
-| `/list-album` | `ListAlbum` | Table of albums. Delete calls `POST /api/album/remove` with `{ id }`. |
-| `/add-song` | `AddSong` | Name, description, album name (loaded from `/api/album/list`), cover, audio file. `POST /api/song/add`. |
-| `/list-song` | `ListSong` | Table of songs. Delete calls `POST /api/song/remove` with `{ id }`. |
+| `/add-album` | `AddAlbum` | Title, description, color, cover. Admins pick an artist ID. `POST /v1/albums`. |
+| `/list-album` | `ListAlbum` | Paged albums. Delete is `DELETE /v1/albums/:id` after confirm. |
+| `/add-song` | `AddSong` | Title, description, album **ID**, audio, optional cover. `POST /v1/albums/:id/tracks`. |
+| `/list-song` | `ListSong` | Paged tracks. Delete is `DELETE /v1/tracks/:id` after confirm. |
+| `/add-artist`, `/list-artist` | admin only | Create and list artists |
+| `/users` | admin only | Search users, change role (optional artist ID), disable or enable |
 
 Album color is a hex value. The listener uses it only as the album-page gradient.
 
@@ -325,12 +326,12 @@ npm run dev              # or: npm start, to run in the background
 # 3. Optional tools: pgAdmin at http://localhost:5050, Mailpit at http://localhost:8025
 npm run dev:tools
 
-# 4. Front ends, in their own terminals
+# 4. Front ends (each app reads VITE_API_URL from its .env; see .env.example)
 cd spotify-clone && npm install && npm run dev                    # http://localhost:5173
-cd spotify-admin && npm install && npm run dev -- --port 5174     # http://localhost:5174
+cd spotify-admin && npm install && npm run dev                    # http://localhost:5174
 ```
 
-To make the front ends use your local API, set `url` in `spotify-clone/src/context/PlayerContext.jsx` and the exported `url` in `spotify-admin/src/App.jsx` to `http://localhost:4000`.
+Both apps default to `http://localhost:4000`. Copy `spotify-clone/.env.example` and `spotify-admin/.env.example` if you need a different API. CORS must include `http://localhost:5173` and `http://localhost:5174`. Create an admin with `npm run db:seed` before using the admin panel.
 
 ### Useful commands (from the repository root)
 
