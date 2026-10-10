@@ -24,8 +24,12 @@ export async function loadFromMongo(uri: string, database: string): Promise<Lega
     await client.connect()
     const db = client.db(database)
     const toLegacy = <T>(doc: Record<string, unknown>) => ({ ...doc, _id: String(doc._id) }) as T
-    const albums = (await db.collection('albums').find({}).toArray()).map((d) => toLegacy<LegacyAlbum>(d))
-    const songs = (await db.collection('songs').find({}).toArray()).map((d) => toLegacy<LegacySong>(d))
+    const albums = (await db.collection('albums').find({}).toArray()).map((d) =>
+      toLegacy<LegacyAlbum>(d),
+    )
+    const songs = (await db.collection('songs').find({}).toArray()).map((d) =>
+      toLegacy<LegacySong>(d),
+    )
     return { description: `mongo database "${database}"`, albums, songs }
   } finally {
     await client.close()

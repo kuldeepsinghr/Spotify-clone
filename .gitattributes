@@ -1,0 +1,2 @@
+# Prisma checksums migration files; CRLF conversion on Windows would make them look edited
+backend/prisma/migrations/** text eol=lf

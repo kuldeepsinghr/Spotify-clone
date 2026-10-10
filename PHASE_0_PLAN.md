@@ -417,33 +417,33 @@ flowchart LR
 
 Estimates assume part-time study (about 2 hours per day). Adjust to your pace.
 
-**M0: Repo and tooling (about 1 day)**
-- [ ] Create a working branch strategy (`main`, short-lived feature branches, pull requests even if you work alone)
-- [ ] Add linting and formatting, a commit message convention, and a `.gitignore` review
-- [ ] Add `.env.example` files and a README section describing setup
-- [ ] Back up the current Mongo data
+**M0: Repo and tooling (about 1 day)** (done on `feature/phase0-foundations`)
+- [x] Create a working branch strategy (`master` here, short-lived feature branches, pull requests even if you work alone)
+- [x] Add linting and formatting, a commit message convention, and a `.gitignore` review (ESLint for the backend, Prettier at the root, Conventional Commits documented in the README)
+- [x] Add `.env.example` files and a README section describing setup
+- [x] Back up the current Mongo data (exported through the hosted API with `npm run backup:legacy`, because MongoDB itself was not reachable; saved in the git-ignored `backups/`)
 
-**M1: Docker and Postgres (about 2 days)**
-- [ ] Write the compose file with Postgres, pgAdmin and the API service
-- [ ] Add healthchecks, a named volume and the multi-stage API Dockerfile
-- [ ] Prove: `docker compose up` gives a running API that connects to Postgres
-- [ ] Add scripts for reset, migrate and seed
+**M1: Docker and Postgres (about 2 days)** (done)
+- [x] Write the compose file with Postgres, pgAdmin and the API service
+- [x] Add healthchecks, a named volume and the multi-stage API Dockerfile
+- [x] Prove: `docker compose up` gives a running API that connects to Postgres
+- [ ] Add scripts for reset, migrate and seed (reset and migrate done; the admin seed command is part of M4)
 
-**M2: Schema and data migration (about 3 days)**
-- [ ] Finalise the table design in section 6 and review it once
-- [ ] Create the Prisma schema and the first migration
-- [ ] Write the dry-run script and read the report
-- [ ] Decide the artist and orphan-song rules (section 10.2)
-- [ ] Run the real migration and the verification checklist
-- [ ] Write a short migration report with counts
+**M2: Schema and data migration (about 3 days)** (done)
+- [x] Finalise the table design in section 6 and review it once
+- [x] Create the Prisma schema and the first migration
+- [x] Write the dry-run script and read the report
+- [x] Decide the artist and orphan-song rules (section 10.2): placeholder artist; orphans are reported, or moved to "Singles" with `--orphans-to-singles`
+- [x] Run the real migration and the verification checklist
+- [x] Write a short migration report with counts ([docs/migration-report-phase0.md](docs/migration-report-phase0.md))
 
-**M3: Layered backend and read APIs (about 4 days)**
-- [ ] Add the shared pieces: environment validation, logger, error classes, response envelope, pagination helper, validators
-- [ ] Rebuild albums, artists and tracks as modules following the layer rules
-- [ ] Implement the `/v1` read endpoints with pagination
-- [ ] Add the search endpoint with trigram indexes
-- [ ] Add health and readiness endpoints
-- [ ] Write the first service and integration tests
+**M3: Layered backend and read APIs (about 4 days)** (done)
+- [x] Add the shared pieces: environment validation, logger, error classes, response envelope, pagination helper, validators
+- [x] Rebuild albums, artists and tracks as modules following the layer rules
+- [x] Implement the `/v1` read endpoints with pagination
+- [x] Add the search endpoint with trigram indexes
+- [x] Add health and readiness endpoints
+- [x] Write the first service and integration tests (Vitest and Supertest instead of Jest; same API, simpler with TypeScript ES modules)
 
 **M4: Authentication and roles (about 5 days)**
 - [ ] Implement register, login, refresh with rotation, logout and logout-all
@@ -516,6 +516,8 @@ Estimates assume part-time study (about 2 hours per day). Adjust to your pace.
 ## 14. Decisions to make before you start
 
 Answer these first; each one changes the plan slightly.
+
+**Answered so far:** 1 TypeScript; 2 a 30-second preview for guests (enforced in M4); 3 block with a clear message (409 `ALBUM_HAS_TRACKS`); 7 placeholder artist "Unknown Artist". Questions 4, 5 and 6 still use the recommendations.
 
 | # | Question | Options | Recommendation |
 | --- | --- | --- | --- |

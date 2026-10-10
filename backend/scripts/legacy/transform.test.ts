@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { hasBlockingIssues, objectIdTimestamp, planMigration, SINGLES_LEGACY_ID } from './transform.js'
+import {
+  hasBlockingIssues,
+  objectIdTimestamp,
+  planMigration,
+  SINGLES_LEGACY_ID,
+} from './transform.js'
 import type { LegacyAlbum, LegacySong } from './types.js'
 
 const album = (id: string, name: string): LegacyAlbum => ({
@@ -21,7 +26,8 @@ const song = (id: string, albumName: string, duration = '3:05'): LegacySong => (
 })
 
 // ObjectIds whose first 8 hex digits encode increasing timestamps
-const id = (seconds: number, suffix: string) => seconds.toString(16).padStart(8, '0') + suffix.padStart(16, '0')
+const id = (seconds: number, suffix: string) =>
+  seconds.toString(16).padStart(8, '0') + suffix.padStart(16, '0')
 
 describe('objectIdTimestamp', () => {
   it('reads the creation time from an ObjectId', () => {

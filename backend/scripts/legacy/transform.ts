@@ -1,7 +1,7 @@
 import { parseLegacyDuration } from '../../src/shared/duration.js'
 import type { LegacyAlbum, LegacySong } from './types.js'
 
-export const PLACEHOLDER_ARTIST_NAME = 'Unknown Artist'
+export { PLACEHOLDER_ARTIST_NAME } from '../../src/shared/catalog.js'
 export const SINGLES_ALBUM_TITLE = 'Singles'
 /** Stands in for a Mongo ID so re-runs update the same Singles album instead of adding another. */
 export const SINGLES_LEGACY_ID = 'migration:singles'
@@ -121,7 +121,12 @@ export function planMigration(
     const legacyId = String(song._id)
     const missing = (['name', 'file', 'image'] as const).filter((field) => isBlank(song[field]))
     if (missing.length > 0) {
-      issues.push({ kind: 'invalid_song', severity: 'skipped', legacyId, detail: `missing ${missing.join(', ')}` })
+      issues.push({
+        kind: 'invalid_song',
+        severity: 'skipped',
+        legacyId,
+        detail: `missing ${missing.join(', ')}`,
+      })
       continue
     }
 
@@ -191,7 +196,8 @@ export function planMigration(
   // Number tracks inside each album in the order they were originally added.
   unnumbered.sort(
     (a, b) =>
-      a.createdAt.getTime() - b.createdAt.getTime() || a.legacyMongoId.localeCompare(b.legacyMongoId),
+      a.createdAt.getTime() - b.createdAt.getTime() ||
+      a.legacyMongoId.localeCompare(b.legacyMongoId),
   )
   const nextNumber = new Map<string, number>()
   const tracks = unnumbered.map((track) => {

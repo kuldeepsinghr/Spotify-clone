@@ -15,7 +15,7 @@ FROM deps AS dev
 ENV NODE_ENV=development
 COPY . .
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run dev"]
+CMD ["sh", "-c", "npx prisma migrate deploy && exec npx tsx watch src/server.ts"]
 
 FROM deps AS build
 COPY . .
@@ -34,4 +34,5 @@ USER node
 EXPOSE 4000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s \
   CMD wget -qO- http://localhost:4000/v1/health || exit 1
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# exec replaces the shell so node is PID 1 and receives SIGTERM from `docker stop`
+CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/server.js"]

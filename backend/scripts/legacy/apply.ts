@@ -9,7 +9,9 @@ export async function applyPlan(prisma: PrismaClient, plan: MigrationPlan) {
   return prisma.$transaction(
     async (tx) => {
       const artist =
-        (await tx.artist.findFirst({ where: { name: PLACEHOLDER_ARTIST_NAME, ownerUserId: null } })) ??
+        (await tx.artist.findFirst({
+          where: { name: PLACEHOLDER_ARTIST_NAME, ownerUserId: null },
+        })) ??
         (await tx.artist.create({
           data: {
             name: PLACEHOLDER_ARTIST_NAME,
@@ -31,9 +33,12 @@ export async function applyPlan(prisma: PrismaClient, plan: MigrationPlan) {
       }
 
       const albumArtist = new Map(
-        (await tx.album.findMany({ where: { id: { in: [...albumIds.values()] } }, select: { id: true, artistId: true } })).map(
-          (a) => [a.id, a.artistId],
-        ),
+        (
+          await tx.album.findMany({
+            where: { id: { in: [...albumIds.values()] } },
+            select: { id: true, artistId: true },
+          })
+        ).map((a) => [a.id, a.artistId]),
       )
 
       for (const track of plan.tracks) {

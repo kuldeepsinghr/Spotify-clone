@@ -19,7 +19,10 @@ function sample<T>(items: T[], size: number): T[] {
 }
 
 /** Compares what PostgreSQL holds against what the plan said it should hold. */
-export async function verifyPlan(prisma: PrismaClient, plan: MigrationPlan): Promise<CheckResult[]> {
+export async function verifyPlan(
+  prisma: PrismaClient,
+  plan: MigrationPlan,
+): Promise<CheckResult[]> {
   const albumIds = plan.albums.map((a) => a.legacyMongoId)
   const trackIds = plan.tracks.map((t) => t.legacyMongoId)
   const results: CheckResult[] = []
@@ -54,7 +57,10 @@ export async function verifyPlan(prisma: PrismaClient, plan: MigrationPlan): Pro
   results.push({
     name: 'track artist matches album artist',
     passed: mismatchedArtist.length === 0,
-    detail: mismatchedArtist.length === 0 ? 'all match' : `mismatched: ${mismatchedArtist.map((t) => t.legacyMongoId).join(', ')}`,
+    detail:
+      mismatchedArtist.length === 0
+        ? 'all match'
+        : `mismatched: ${mismatchedArtist.map((t) => t.legacyMongoId).join(', ')}`,
   })
 
   const expected = new Map(plan.tracks.map((t) => [t.legacyMongoId, t]))
@@ -70,7 +76,10 @@ export async function verifyPlan(prisma: PrismaClient, plan: MigrationPlan): Pro
   results.push({
     name: `spot check of ${Math.min(SAMPLE_SIZE, tracks.length)} random tracks`,
     passed: wrong.length === 0,
-    detail: wrong.length === 0 ? 'fields match the source' : `differ: ${wrong.map((t) => t.legacyMongoId).join(', ')}`,
+    detail:
+      wrong.length === 0
+        ? 'fields match the source'
+        : `differ: ${wrong.map((t) => t.legacyMongoId).join(', ')}`,
   })
 
   return results

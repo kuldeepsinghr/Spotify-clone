@@ -43,14 +43,17 @@ async function load(): Promise<LegacyData> {
     return loadFromMongo(uri, values['mongo-db']!)
   }
   if (values.source === 'file') {
-    if (!values.file) throw new Error('Pass --file <export.json> (create one with `npm run backup:legacy`)')
+    if (!values.file)
+      throw new Error('Pass --file <export.json> (create one with `npm run backup:legacy`)')
     return loadFromFile(path.resolve(values.file))
   }
   throw new Error(`Unknown --source "${values.source}"; use "file" or "mongo"`)
 }
 
 const data = await load()
-const plan = planMigration(data.albums, data.songs, { orphansToSingles: values['orphans-to-singles'] })
+const plan = planMigration(data.albums, data.songs, {
+  orphansToSingles: values['orphans-to-singles'],
+})
 const blocked = hasBlockingIssues(plan)
 
 const mode = values['verify-only'] ? 'verify only' : values.apply ? 'applied' : 'dry run'
@@ -59,7 +62,9 @@ let exitCode = 0
 
 if (mode !== 'dry run') {
   if (mode === 'applied' && blocked && !values.force) {
-    console.error('The report lists skipped records. Fix the data, use --orphans-to-singles, or pass --force.')
+    console.error(
+      'The report lists skipped records. Fix the data, use --orphans-to-singles, or pass --force.',
+    )
     exitCode = 1
   } else {
     const prisma = new PrismaClient()
@@ -86,6 +91,7 @@ const reportFile = path.join(
 )
 await writeFile(reportFile, report)
 console.log(`Report saved to ${reportFile}`)
-if (mode === 'dry run' && blocked) console.log('Dry run found skipped records; resolve them before --apply.')
+if (mode === 'dry run' && blocked)
+  console.log('Dry run found skipped records; resolve them before --apply.')
 
 process.exitCode = exitCode

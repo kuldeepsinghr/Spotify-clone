@@ -1,10 +1,10 @@
 # Architecture
 
-The Spotify clone is three apps. The listener and the admin call one Express API. MongoDB stores album and song metadata. Cloudinary stores cover images and audio. The player streams those Cloudinary URLs in the browser.
+The Spotify clone is three apps. The listener and the admin call one Express API. PostgreSQL stores catalog metadata. Cloudinary stores cover images and audio. The player streams those Cloudinary URLs in the browser.
 
-Both front ends call `https://spotify-clone-backend-rctz.onrender.com`.
+Both front ends call `https://spotify-clone-backend-rctz.onrender.com` through the legacy `/api` routes. The layered `/v1` API exists alongside them; the front ends move to it in Phase 0 milestone M6, and `/api` is then removed.
 
-The million-user target, with diagrams and a phased build order, is in [SCALING-PLAN.md](SCALING-PLAN.md).
+The million-user target, with diagrams and a phased build order, is in [SCALING-PLAN.md](SCALING-PLAN.md). Phase 0 progress is tracked in [PHASE_0_PLAN.md](PHASE_0_PLAN.md).
 
 ## System
 
@@ -15,69 +15,77 @@ flowchart LR
     Admin["spotify-admin<br/>Add / List pages"]
   end
 
-  API["Express API<br/>/api/song  /api/album"]
-  DB[("MongoDB<br/>database: spotify")]
+  subgraph docker [docker compose]
+    API["Express API<br/>/v1 and legacy /api"]
+    DB[("PostgreSQL 16<br/>database: spotify")]
+  end
   CDN["Cloudinary<br/>images and audio"]
 
-  Player -->|"GET /list"| API
+  Player -->|"GET /api/.../list"| API
   Admin -->|"POST /add  POST /remove  GET /list"| API
-  API -->|"song and album documents"| DB
+  API -->|"Prisma"| DB
   API -->|"upload files, store secure_url"| CDN
-  Player -->|"play track.file and show images"| CDN
+  Player -->|"play audio and show images"| CDN
 ```
 
-A song belongs to an album by **name**. `song.album` is the album `name` string. The album page shows songs where `item.album === album.name`.
+Tracks reference albums and artists by ID, with foreign keys. The legacy `/api` responses still put the album's **name** in each song's `album` field, because the listener's album page shows songs where `item.album === album.name`.
+
+## Backend layers
+
+```mermaid
+flowchart LR
+  Route["routes<br/>URL + middleware"] --> Controller["controller<br/>parse request, shape response"]
+  Controller --> Service["service<br/>business rules"]
+  Service --> Repo["repository<br/>Prisma queries"]
+  Repo --> DB[("PostgreSQL")]
+  Service -.->|"other modules only via their service"| OtherService["another module's service"]
+```
+
+| Module | Routes | Notes |
+| --- | --- | --- |
+| `health` | `/v1/health`, `/v1/ready` | Liveness never touches the database; readiness pings it |
+| `albums` | `/v1/albums`, `/:id`, `/:id/tracks` | Album totals come from `tracksService`; deleting an album with tracks returns 409 `ALBUM_HAS_TRACKS` |
+| `artists` | `/v1/artists`, `/:id`, `/:id/albums`, `/:id/top-tracks` | Owns the "Unknown Artist" placeholder |
+| `tracks` | `/v1/tracks`, `/:id` | New tracks get the next track number in their album |
+| `search` | `/v1/search` | No repository of its own; asks each catalog service to search |
+| `legacy` | `/api/song/*`, `/api/album/*` | Translates the old contract onto the services above |
+
+Shared pieces in `src/shared`: the Prisma client (`db.ts`), pino logger, `AppError` and error codes, the response envelope, cursor pagination, and Zod validation. `src/middleware` holds the error handler, which maps `AppError`, Prisma, Multer, and body-parser errors to the envelope without leaking stack traces, and deletes temp upload files on failure.
+
+### Pagination
+
+Lists fetch `limit + 1` rows. The extra row only signals another page. `meta.nextCursor` is base64url JSON holding the last row's ID, which Prisma uses as a keyset cursor. IDs are UUIDv7, so they sort by creation time. Search pages by offset, since its order is by relevance.
+
+### Search
+
+`pg_trgm` GIN indexes on `tracks.title`, `albums.title`, and `artists.name` back two conditions: `ILIKE '%q%'` for substrings, and `q <% column` (word similarity of at least 0.6) for typos such as "midnite" finding "Midnight Drive". Results are ordered by word similarity, then whole-string similarity.
+
+## Data model
+
+```mermaid
+erDiagram
+  USERS ||--o{ REFRESH_TOKENS : has
+  USERS ||--o| ARTISTS : "may own"
+  USERS ||--o{ PLAYLISTS : owns
+  USERS ||--o{ LIKED_TRACKS : likes
+  USERS ||--o{ PLAY_HISTORY : plays
+  ARTISTS ||--o{ ALBUMS : releases
+  ARTISTS ||--o{ TRACKS : performs
+  ALBUMS ||--o{ TRACKS : contains
+  PLAYLISTS ||--o{ PLAYLIST_TRACKS : includes
+  TRACKS ||--o{ PLAYLIST_TRACKS : "appears in"
+  TRACKS ||--o{ LIKED_TRACKS : "liked by"
+  TRACKS ||--o{ PLAY_HISTORY : "played as"
+```
+
+The full schema is [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma). Delete behaviour is deliberate: albums and tracks are `RESTRICT`, so an album with tracks and an artist with albums cannot be deleted; user-owned rows such as playlists, likes, and history cascade. Check constraints in the first migration keep emails lowercase, track numbers positive, and volume between 0 and 100. `legacy_mongo_id` on albums and tracks traces rows back to MongoDB and is dropped in Phase 1.
 
 ## Code map
 
-```mermaid
-flowchart TB
-  subgraph listener [spotify-clone]
-    Main["main.jsx<br/>BrowserRouter + PlayerContextProvider"]
-    App["App.jsx<br/>Sidebar + Display + Player + audio"]
-    Home["DisplayHome<br/>Featured Charts and Today's biggest hits"]
-    AlbumPage["DisplayAlbum<br/>/album/:id"]
-    PlayerBar["Player<br/>play, pause, seek, next, previous"]
-  end
-
-  subgraph adminApp [spotify-admin]
-    AdminApp["App.jsx routes"]
-    AddSong["/add-song"]
-    ListSong["/list-song"]
-    AddAlbum["/add-album"]
-    ListAlbum["/list-album"]
-  end
-
-  subgraph api [backend]
-    Server["server.js"]
-    SongRoute["/api/song"]
-    AlbumRoute["/api/album"]
-    SongCtrl["songController"]
-    AlbumCtrl["albumController"]
-  end
-
-  Main --> App
-  App --> Home
-  App --> AlbumPage
-  App --> PlayerBar
-  AdminApp --> AddSong
-  AdminApp --> ListSong
-  AdminApp --> AddAlbum
-  AdminApp --> ListAlbum
-  AddSong --> SongRoute
-  ListSong --> SongRoute
-  AddAlbum --> AlbumRoute
-  ListAlbum --> AlbumRoute
-  Home --> SongRoute
-  Home --> AlbumRoute
-  Server --> SongRoute
-  Server --> AlbumRoute
-  SongRoute --> SongCtrl
-  AlbumRoute --> AlbumCtrl
-```
-
 ```text
 Spotify-clone/
+├── docker-compose.yml      postgres, api; pgadmin + mailpit (profile dev); mongo (profile migration)
+├── docker/                 postgres init (creates spotify_test), pgadmin server list
 ├── spotify-clone/          Listener UI
 │   └── src/
 │       ├── main.jsx        Router + PlayerContextProvider
@@ -90,20 +98,23 @@ Spotify-clone/
 │       ├── components/     Sidebar, Navbar
 │       └── pages/          AddSong, ListSong, AddAlbum, ListAlbum
 └── backend/
-    ├── server.js           Express, CORS, route mounts
+    ├── Dockerfile          dev target (tsx watch) and runtime target (compiled, non-root)
+    ├── prisma/             schema and migrations
+    ├── scripts/            legacy backup and Mongo-to-Postgres migration
+    ├── test/               integration tests
     └── src/
-        ├── config/         mongodb.js, cloudinary.js
-        ├── middleware/     multer.js
-        ├── models/         songModel.js, albumModel.js
-        ├── controllers/    songController.js, albumController.js
-        └── routes/         songRoute.js, albumRoute.js
+        ├── server.ts, app.ts
+        ├── config/         env (Zod-validated), cloudinary
+        ├── shared/         db, logger, errors, response, pagination, validate, search
+        ├── middleware/     error-handler, upload
+        └── modules/        health, albums, artists, tracks, search, legacy
 ```
 
 | App | Stack | Role |
 | --- | --- | --- |
 | `spotify-clone` | React 18, React Router 6, Axios, Tailwind | Browse and play |
 | `spotify-admin` | React 18, React Router 6, Axios, MUI, Toastify, Tailwind | Add and remove catalog items |
-| `backend` | Express 4, Mongoose, Multer, Cloudinary | Persist metadata and files |
+| `backend` | Express 5, TypeScript, Prisma 6, PostgreSQL 16, Zod, pino, helmet, Multer, Cloudinary | Persist metadata and files |
 
 ## Playback
 
@@ -141,23 +152,21 @@ sequenceDiagram
 
 ## Upload
 
-Admin writes use `multipart/form-data`. Multer accepts the files, Cloudinary stores them, and MongoDB stores the URLs.
+Admin writes use `multipart/form-data`. Multer checks file type and size and writes to the OS temp folder under a random name. The service uploads to Cloudinary, stores the URLs in PostgreSQL, and deletes the temp files.
 
 ```mermaid
 sequenceDiagram
   participant Admin as Add Song form
   participant API as POST /api/song/add
-  participant Multer as Multer
   participant CDN as Cloudinary
-  participant DB as MongoDB
+  participant DB as PostgreSQL
 
-  Admin->>API: name, desc, album, image, audio
-  API->>Multer: save uploads to disk
-  Multer->>CDN: image as image, audio as video
+  Admin->>API: name, desc, album name, image, audio
+  API->>DB: find exactly one album with that name
+  API->>CDN: image as image, audio as video
   CDN-->>API: secure_url and duration
-  API->>API: duration becomes m:s
-  API->>DB: save song document
-  DB-->>Admin: success true
+  API->>DB: insert track (duration_ms, next track_number)
+  DB-->>Admin: 201, success true
 ```
 
 | Admin route | Page | API |
@@ -167,24 +176,13 @@ sequenceDiagram
 | `/add-song` | `AddSong` | `POST /api/song/add` |
 | `/list-song` | `ListSong` | `GET /api/song/list`, `POST /api/song/remove` |
 
-Audio is uploaded with Cloudinary `resource_type: "video"` so the response includes duration. The API stores that as `minutes:seconds`. Deleting a song or album removes the MongoDB document and leaves the Cloudinary file in place.
+Deleting a song or album removes the database row and leaves the Cloudinary file in place.
 
-## API and data
+## Decisions recorded for Phase 0
 
-`server.js` connects MongoDB and Cloudinary, then mounts the routers. The database name is `spotify`.
-
-| Method | Path | Result |
-| --- | --- | --- |
-| `GET` | `/` | `Api working` |
-| `POST` | `/api/song/add` | Saves `{ name, desc, album, image, file, duration }` |
-| `GET` | `/api/song/list` | `{ success: true, songs }` |
-| `POST` | `/api/song/remove` | Deletes by `{ id }` |
-| `POST` | `/api/album/add` | Saves `{ name, desc, bgColor, image }` |
-| `GET` | `/api/album/list` | `{ success: "true", album }` |
-| `POST` | `/api/album/remove` | Deletes by `{ id }` |
-
-**Song:** `name`, `desc`, `album`, `image`, `file`, `duration`.
-
-**Album:** `name`, `desc`, `bgColor`, `image`.
-
-Song responses use boolean `success`. Album responses use the strings `"true"` and `"false"`.
+| Question | Decision |
+| --- | --- |
+| Backend language | TypeScript |
+| Can guests play music? | 30-second preview; enforced once accounts exist (M4) |
+| Deleting an album that has tracks | Blocked with 409 `ALBUM_HAS_TRACKS` |
+| Old songs without an artist | Placeholder "Unknown Artist", fixed later in the admin app |
