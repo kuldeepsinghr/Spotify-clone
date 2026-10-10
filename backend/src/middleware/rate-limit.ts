@@ -47,3 +47,12 @@ export function createAuthRateLimits() {
     refresh: rateLimit({ ...base, windowMs: 60_000, limit: 30, keyGenerator: ip }),
   }
 }
+
+/** Plays feed top-track rankings, so one account cannot record more than 60 a minute. Runs after authenticate. */
+export const createPlayRateLimit = () =>
+  rateLimit({
+    ...base,
+    windowMs: 60_000,
+    limit: 60,
+    keyGenerator: (req) => `play|${req.actor?.id ?? ip(req)}`,
+  })

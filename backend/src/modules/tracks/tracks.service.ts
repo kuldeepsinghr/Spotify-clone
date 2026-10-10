@@ -63,6 +63,27 @@ export const tracksService = {
     return forViewer(await requireTrack(id), viewer)
   },
 
+  /** Throws 404 unless the track exists; returns its duration for callers that need it. */
+  async requireDuration(id: string) {
+    const track = await requireTrack(id)
+    return track.durationMs
+  },
+
+  /** Tracks keyed by ID for the viewer; IDs that no longer exist are absent from the map. */
+  async getMany(ids: string[], viewer: Viewer) {
+    const rows = ids.length ? await tracksRepository.findByIds(ids) : []
+    return new Map(rows.map((row) => [row.id, forViewer(row, viewer)]))
+  },
+
+  /** Replaces each row's `trackId` with the track; rows whose track was deleted are dropped. */
+  async withTracks<T extends { trackId: string }>(rows: T[], viewer: Viewer) {
+    const tracks = await tracksService.getMany([...new Set(rows.map((row) => row.trackId))], viewer)
+    return rows.flatMap(({ trackId, ...rest }) => {
+      const track = tracks.get(trackId)
+      return track ? [{ ...rest, track }] : []
+    })
+  },
+
   async listByAlbum(albumId: string, page: PageRequest, viewer: Viewer) {
     const rows = await tracksRepository.listByAlbum(albumId, {
       take: page.limit + 1,

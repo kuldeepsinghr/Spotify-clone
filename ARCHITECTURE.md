@@ -51,9 +51,15 @@ flowchart LR
 | `artists` | `/v1/artists`, `/:id`, `/:id/albums`, `/:id/top-tracks` | Owns the "Unknown Artist" placeholder and artist ownership (`artists.access.ts`) |
 | `tracks` | `/v1/tracks`, `/:id` | New tracks get the next track number in their album; `forViewer` swaps in the guest preview |
 | `search` | `/v1/search` | No repository of its own; asks each catalog service to search |
+| `library` | `/v1/me/likes` | Likes; keyset pages on `(liked_at, track_id)` |
+| `playlists` | `/v1/playlists`, `/v1/me/playlists` | Visibility and ownership rules in the service; positions kept 0..n-1 under a row lock |
+| `history` | `/v1/me/history` | Minimum-play and duplicate rules; feeds artists' top tracks |
+| `player` | `/v1/me/player` | One row per user, upserted |
 | `legacy` | `/api/song/*`, `/api/album/*` | Translates the old contract onto the services above; writes need an admin |
 
 Shared pieces in `src/shared`: the Prisma client (`db.ts`), pino logger, `AppError` and error codes, the response envelope, cursor pagination, Zod validation, password hashing, token signing, temp-file cleanup and guest preview URLs. `src/middleware` holds the error handler (it maps `AppError`, Prisma, Multer and body-parser errors to the envelope without leaking stack traces, and deletes temp upload files on failure), uploads, rate limits, and authentication.
+
+The library modules (likes, playlists, history, player) store only track IDs and get track details through `tracksService.withTracks`, which also applies the guest preview.
 
 Two deliberate exceptions to the layer rules:
 

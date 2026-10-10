@@ -83,6 +83,42 @@ const matrix: MatrixRow[] = [
     expect: { guest: 401, user: 200, owner: 200, otherArtist: 200, admin: 200 },
   },
   {
+    name: 'GET /v1/me/likes',
+    send: () => request(app).get('/v1/me/likes'),
+    expect: { guest: 401, user: 200, owner: 200, otherArtist: 200, admin: 200 },
+  },
+  {
+    name: 'PUT /v1/me/likes/:trackId',
+    send: (w) => request(app).put(`/v1/me/likes/${w.track.id}`),
+    expect: { guest: 401, user: 204, owner: 204, otherArtist: 204, admin: 204 },
+  },
+  {
+    name: 'GET /v1/me/playlists',
+    send: () => request(app).get('/v1/me/playlists'),
+    expect: { guest: 401, user: 200, owner: 200, otherArtist: 200, admin: 200 },
+  },
+  {
+    name: 'POST /v1/playlists',
+    send: () => request(app).post('/v1/playlists').send({}),
+    expect: { guest: 401, user: 201, owner: 201, otherArtist: 201, admin: 201 },
+  },
+  {
+    name: 'GET /v1/me/history',
+    send: () => request(app).get('/v1/me/history'),
+    expect: { guest: 401, user: 200, owner: 200, otherArtist: 200, admin: 200 },
+  },
+  {
+    name: 'POST /v1/me/history',
+    send: (w) =>
+      request(app).post('/v1/me/history').send({ trackId: w.track.id, playedMs: 60_000 }),
+    expect: { guest: 401, user: 201, owner: 201, otherArtist: 201, admin: 201 },
+  },
+  {
+    name: 'GET /v1/me/player',
+    send: () => request(app).get('/v1/me/player'),
+    expect: { guest: 401, user: 200, owner: 200, otherArtist: 200, admin: 200 },
+  },
+  {
     name: 'POST /v1/albums for the owner’s artist',
     send: (w) =>
       request(app)

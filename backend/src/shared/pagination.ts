@@ -46,14 +46,28 @@ export const afterIdFrom = (request: PageRequest) =>
  * The extra row only signals that another page exists; it is not returned.
  */
 export function toIdPage<T extends { id: string }>(rows: T[], limit: number): Page<T> {
+  return toKeyedPage(rows, limit, (last) => ({ id: last.id }))
+}
+
+/** Like toIdPage, for lists ordered by something other than ID; `keyOf` builds the cursor. */
+export function toKeyedPage<T>(
+  rows: T[],
+  limit: number,
+  keyOf: (last: T) => Record<string, unknown>,
+): Page<T> {
   const items = rows.slice(0, limit)
   const last = items.at(-1)
   return {
     items,
     limit,
-    nextCursor: rows.length > limit && last ? encodeCursor({ id: last.id }) : null,
+    nextCursor: rows.length > limit && last !== undefined ? encodeCursor(keyOf(last)) : null,
   }
 }
+
+export const mapPage = <T, U>(page: Page<T>, map: (item: T) => U): Page<U> => ({
+  ...page,
+  items: page.items.map(map),
+})
 
 export function toOffsetPage<T>(rows: T[], limit: number, offset: number): Page<T> {
   return {

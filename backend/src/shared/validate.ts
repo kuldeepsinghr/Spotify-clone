@@ -13,3 +13,4 @@ export function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infe
 }
 
 export const idParamsSchema = z.object({ id: z.string().uuid() })
+export const trackIdParamsSchema = z.object({ trackId: z.string().uuid() })

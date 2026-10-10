@@ -455,12 +455,12 @@ Estimates assume part-time study (about 2 hours per day). Adjust to your pace.
 - [x] Write the permission-matrix test: every route against every role (`test/permissions.int.test.ts`)
 - [x] Enforce the 30-second guest preview on `/v1` track responses
 
-**M5: Library APIs (about 4 days)**
-- [ ] Likes: like, unlike, list
-- [ ] Playlists: full create, read, update, delete and track management with ordering
-- [ ] History: record and list recent plays
-- [ ] Player state endpoints (P2)
-- [ ] Tests for ownership rules (a user cannot edit another user's playlist)
+**M5: Library APIs (about 4 days)** (done)
+- [x] Likes: like, unlike, list (plus a bulk "is liked" check for heart icons)
+- [x] Playlists: full create, read, update, delete and track management with ordering (public and private, cover upload)
+- [x] History: record and list recent plays (30-second minimum, duplicate guard, rate limit, clear)
+- [x] Player state endpoints (P2)
+- [x] Tests for ownership rules (a user cannot edit another user's playlist) (`test/library.int.test.ts`, plus new rows in the permission matrix)
 
 **M6: Front end authentication and admin app (about 4 days)**
 - [ ] Listener: auth context, login and sign up pages, silent refresh, protected routes

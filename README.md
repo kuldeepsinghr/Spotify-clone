@@ -223,6 +223,37 @@ Writes need a signed-in artist or admin. Artists can change only their own artis
 | `PATCH` | `/v1/artists/:id` | owner, admin | `name`, `bio`, optional `image` |
 | `DELETE` | `/v1/artists/:id` | admin | 409 `ARTIST_HAS_ALBUMS` if it still has albums |
 
+### Your library
+
+Signed-in accounts only (any role). Track items carry the full track, the same shape as `/v1/tracks/:id`.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/v1/me/likes` | Liked songs, newest first: `[{ likedAt, track }]` |
+| `PUT`, `DELETE` | `/v1/me/likes/:trackId` | Like or unlike; both idempotent, 204 |
+| `GET` | `/v1/me/likes/contains?ids=a,b` | Up to 50 IDs: `{ [trackId]: true \| false }`, for heart icons |
+| `GET` | `/v1/me/playlists` | Your playlists, newest first |
+| `GET`, `DELETE` | `/v1/me/history` | Recent plays `[{ id, playedAt, track }]`; `DELETE` clears them |
+| `POST` | `/v1/me/history` | `{ trackId, playedMs }`. 201 when recorded; 200 with `recorded: false` and `TOO_SHORT` (under 30 s, or half a shorter track) or `DUPLICATE` (same track within 10 s). At most 60 a minute per account. |
+| `GET`, `PATCH` | `/v1/me/player` | Last track, `positionMs`, `volume` (0 to 100), `repeatMode` (`off`, `all`, `one`), `shuffle`. A new track without a position starts at 0; positions past the end are clamped. |
+
+### Playlists
+
+Private by default. A private playlist answers 404 to everyone except its owner and admins. Public ones can be read by anyone, guests included, who get previews. Only the owner or an admin can change one.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/v1/playlists` | `{ name?, description?, isPublic? }`. Without a name: "My Playlist #N". At most 500 per account. |
+| `GET` | `/v1/playlists/:id` | Includes `trackCount` and `totalDurationMs` |
+| `PATCH` | `/v1/playlists/:id` | `name`, `description`, `isPublic`; multipart with a `cover` image to set the cover |
+| `DELETE` | `/v1/playlists/:id` | 204 |
+| `GET` | `/v1/playlists/:id/tracks` | `[{ position, addedAt, track }]` in order |
+| `POST` | `/v1/playlists/:id/tracks` | `{ trackId, position? }` inserts (default: at the end). 409 `TRACK_ALREADY_IN_PLAYLIST`; at most 10,000 tracks. |
+| `PATCH` | `/v1/playlists/:id/tracks/:trackId` | `{ position }` moves the track |
+| `DELETE` | `/v1/playlists/:id/tracks/:trackId` | Removes it; later tracks move up |
+
+Positions always run 0 to n-1. Edits to one playlist are serialized with a row lock, so concurrent adds cannot produce duplicate positions.
+
 ### Admin
 
 All `/v1/admin` routes need the `admin` role.
@@ -255,7 +286,7 @@ These keep the request and response shapes the two React apps already use, now b
 
 ### Data model
 
-PostgreSQL tables are defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma): `users`, `refresh_tokens`, `password_reset_tokens`, `artists`, `albums`, `tracks`, `playlists`, `playlist_tracks`, `liked_tracks`, `play_history`, `user_player_state`. The library tables (`playlists`, `liked_tracks`, `play_history`, `user_player_state`) and `password_reset_tokens` are used from M5 on.
+PostgreSQL tables are defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma): `users`, `refresh_tokens`, `password_reset_tokens`, `artists`, `albums`, `tracks`, `playlists`, `playlist_tracks`, `liked_tracks`, `play_history`, `user_player_state`. `password_reset_tokens` is not used yet.
 
 ## Backend folders
 
@@ -271,7 +302,8 @@ backend/
     ├── shared/         db client, logger, errors, response envelope, pagination, validation,
     │                   passwords, tokens, guest previews
     ├── middleware/     error handler, uploads, authenticate / requireRole, rate limits
-    └── modules/        health, auth, users (/me), admin, artists, albums, tracks, search, legacy
+    └── modules/        health, auth, users (/me), admin, artists, albums, tracks, search,
+                        library (likes), playlists, history, player, legacy
                         each: routes -> controller -> service -> repository
 ```
 
