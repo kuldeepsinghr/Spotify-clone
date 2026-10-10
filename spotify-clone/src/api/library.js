@@ -21,7 +21,15 @@ export const libraryApi = {
   listMyPlaylists: (opts) => fetchAll('/v1/me/playlists', opts),
   createPlaylist: async (body = {}) => (await api.post('/v1/playlists', body)).data.data,
   getPlaylist: async (id) => (await api.get(`/v1/playlists/${id}`)).data.data,
-  updatePlaylist: async (id, body) => (await api.patch(`/v1/playlists/${id}`, body)).data.data,
+  updatePlaylist: async (id, body, cover) => {
+    if (!cover) return (await api.patch(`/v1/playlists/${id}`, body)).data.data
+    const form = new FormData()
+    for (const [key, value] of Object.entries(body)) {
+      if (value !== undefined) form.append(key, String(value))
+    }
+    form.append('cover', cover)
+    return (await api.patch(`/v1/playlists/${id}`, form)).data.data
+  },
   deletePlaylist: (id) => api.delete(`/v1/playlists/${id}`),
   listPlaylistTracks: (id, opts) => fetchAll(`/v1/playlists/${id}/tracks`, opts),
   pagePlaylistTracks: (id, opts) => fetchPage(`/v1/playlists/${id}/tracks`, opts),

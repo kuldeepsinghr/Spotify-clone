@@ -38,7 +38,7 @@ const TrackRow = ({ track, index, albumTitle, onPlay, onRemove, removeLabel = 'R
       <p className="hidden sm:block text-[15px] truncate">{album}</p>
       <p className="hidden sm:block text-[15px] text-center">{formatDuration(track.durationMs)}</p>
       <div className="relative z-10 flex items-center gap-1 justify-end" onClick={(event) => event.stopPropagation()}>
-        <LikeButton trackId={track.id} />
+        <LikeButton trackId={track.id} track={track} />
         <button
           type="button"
           title="Play next"

@@ -10,6 +10,7 @@ export function LibraryProvider({ children }) {
   const [playlists, setPlaylists] = useState([])
   const [likedIds, setLikedIds] = useState(() => new Set())
   const [likeCount, setLikeCount] = useState(0)
+  const [likeEvent, setLikeEvent] = useState(null)
   const [libraryReady, setLibraryReady] = useState(false)
   const likedIdsRef = useRef(likedIds)
   likedIdsRef.current = likedIds
@@ -70,23 +71,33 @@ export function LibraryProvider({ children }) {
   )
 
   const toggleLike = useCallback(
-    async (trackId) => {
+    async (trackId, track) => {
       if (!signedIn) return { needsAuth: true, liked: false }
-      const liked = likedIdsRef.current.has(trackId)
-      if (liked) {
-        await libraryApi.unlike(trackId)
-        setLikedIds((prev) => {
-          const next = new Set(prev)
-          next.delete(trackId)
-          return next
+      const wasLiked = likedIdsRef.current.has(trackId)
+      const nextLiked = !wasLiked
+      const apply = (liked) => {
+        const next = new Set(likedIdsRef.current)
+        if (liked) next.add(trackId)
+        else next.delete(trackId)
+        likedIdsRef.current = next
+        setLikedIds(next)
+        setLikeCount((count) => Math.max(0, count + (liked ? 1 : -1)))
+        setLikeEvent({
+          seq: Date.now(),
+          type: liked ? 'add' : 'remove',
+          trackId,
+          track: track ?? null,
         })
-        setLikeCount((count) => Math.max(0, count - 1))
-        return { liked: false }
       }
-      await libraryApi.like(trackId)
-      setLikedIds((prev) => new Set(prev).add(trackId))
-      setLikeCount((count) => count + 1)
-      return { liked: true }
+      apply(nextLiked)
+      try {
+        if (wasLiked) await libraryApi.unlike(trackId)
+        else await libraryApi.like(trackId)
+        return { liked: nextLiked }
+      } catch (error) {
+        apply(wasLiked)
+        throw error
+      }
     },
     [signedIn],
   )
@@ -125,6 +136,7 @@ export function LibraryProvider({ children }) {
     () => ({
       playlists,
       likeCount,
+      likeEvent,
       libraryReady,
       isLiked,
       refreshPlaylists,
@@ -139,6 +151,7 @@ export function LibraryProvider({ children }) {
     [
       playlists,
       likeCount,
+      likeEvent,
       libraryReady,
       isLiked,
       refreshPlaylists,

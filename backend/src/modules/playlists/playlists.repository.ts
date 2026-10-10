@@ -12,11 +12,22 @@ const playlistSelect = {
   updatedAt: true,
   owner: { select: { id: true, displayName: true } },
   _count: { select: { tracks: true } },
+  tracks: {
+    orderBy: { position: 'asc' },
+    take: 4,
+    select: { track: { select: { imageUrl: true } } },
+  },
 } satisfies Prisma.PlaylistSelect
 
 type PlaylistPayload = Prisma.PlaylistGetPayload<{ select: typeof playlistSelect }>
 
-const toPlaylist = ({ _count, ...row }: PlaylistPayload) => ({ ...row, trackCount: _count.tracks })
+const toPlaylist = ({ _count, tracks, ...row }: PlaylistPayload) => ({
+  ...row,
+  trackCount: _count.tracks,
+  previewImages: [
+    ...new Set(tracks.map((item) => item.track.imageUrl).filter((url) => url.length > 0)),
+  ].slice(0, 4),
+})
 
 export type PlaylistRow = ReturnType<typeof toPlaylist>
 

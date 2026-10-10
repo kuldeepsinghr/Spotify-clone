@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import { useAuth } from '../context/AuthContext.jsx'
+import { usePanels } from '../context/PanelsContext.jsx'
 import LikeButton from './LikeButton.jsx'
+import NowPlayingToggle from './NowPlayingToggle.jsx'
 import QueuePanel from './QueuePanel.jsx'
 import { usePlayer } from '../hooks/usePlayer.js'
 
@@ -34,25 +36,34 @@ const Player = () => {
     setShowQueue,
   } = usePlayer()
   const { signedIn } = useAuth()
+  const { nowPlayingOpen, toggleNowPlaying } = usePanels()
 
   return (
     <>
       <QueuePanel />
-      <div className="h-[10%] bg-black flex justify-between items-center text-white px-4 fixed z-10 bottom-1 w-full">
+      <div className="bg-black flex flex-col fixed z-10 bottom-0 inset-x-0">
+      <div className="h-24 flex justify-between items-center text-white px-4">
         <div className="hidden lg:flex items-center gap-4 min-w-[220px]">
           {track ? (
             <>
-              <img src={track.imageUrl} alt="" className="w-12" />
+              <button
+                type="button"
+                onClick={toggleNowPlaying}
+                title={nowPlayingOpen ? 'Hide now playing' : 'Now playing view'}
+                className="shrink-0"
+              >
+                <img src={track.imageUrl} alt="" className="w-12" />
+              </button>
               <div className="min-w-0">
-                <p className="truncate">{track.title}</p>
+                <button type="button" onClick={toggleNowPlaying} className="block max-w-full truncate text-left">
+                  {track.title}
+                </button>
                 {track.artist?.id ? (
                   <Link to={`/artist/${track.artist.id}`} className="text-sm text-[#a7a7a7] hover:underline truncate">
                     {track.artist.name}
                   </Link>
                 ) : (
-                  <p className="text-sm text-[#a7a7a7] truncate">
-                    {(track.description || '').slice(0, 24)}
-                  </p>
+                  <p className="text-sm text-[#a7a7a7] truncate">{(track.description || '').slice(0, 24)}</p>
                 )}
                 {track.isPreview ? (
                   <p className="text-xs text-green-500">
@@ -68,7 +79,7 @@ const Player = () => {
                   </p>
                 ) : null}
               </div>
-              <LikeButton trackId={track.id} />
+              <LikeButton trackId={track.id} track={track} />
             </>
           ) : (
             <p className="text-sm text-[#a7a7a7]">Select a song to play</p>
@@ -114,6 +125,7 @@ const Player = () => {
         </div>
 
         <div className="hidden lg:flex items-center gap-3 min-w-[220px] justify-end">
+          {signedIn ? <NowPlayingToggle open={nowPlayingOpen} onClick={toggleNowPlaying} /> : null}
           <button
             type="button"
             onClick={() => setShowQueue((open) => !open)}
@@ -135,6 +147,13 @@ const Player = () => {
             aria-label="Volume"
           />
         </div>
+      </div>
+      {signedIn && playStatus ? (
+        <div className="bg-[#1db954] text-black text-sm px-4 py-1 flex justify-between">
+          <span>Playing on Web Player</span>
+          <span className="font-semibold">{track?.title}</span>
+        </div>
+      ) : null}
       </div>
     </>
   )

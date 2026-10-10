@@ -5,11 +5,12 @@ import Navbar from '../components/Navbar'
 import StatusMessage from '../components/StatusMessage'
 import TrackRow from '../components/TrackRow'
 import { useLibrary } from '../context/LibraryContext.jsx'
+import { pushToast } from '../context/toast.js'
 import { usePlayer } from '../hooks/usePlayer.js'
 
 const LikedSongs = () => {
   const { playTracks } = usePlayer()
-  const { refreshLikes } = useLibrary()
+  const { likeEvent, toggleLike } = useLibrary()
   const [rows, setRows] = useState([])
   const [nextCursor, setNextCursor] = useState(null)
   const [error, setError] = useState('')
@@ -36,13 +37,25 @@ const LikedSongs = () => {
     }
   }, [])
 
+  useEffect(() => {
+    if (!likeEvent?.trackId) return
+    if (likeEvent.type === 'remove') {
+      setRows((current) => current.filter((row) => row.track.id !== likeEvent.trackId))
+      return
+    }
+    if (!likeEvent.track) return
+    setRows((current) => {
+      if (current.some((row) => row.track.id === likeEvent.track.id)) return current
+      return [{ track: likeEvent.track, likedAt: new Date().toISOString() }, ...current]
+    })
+  }, [likeEvent])
+
   const tracks = rows.map((row) => row.track)
   const totalMs = tracks.reduce((sum, item) => sum + (item.durationMs || 0), 0)
 
-  const unlike = async (track) => {
-    await libraryApi.unlike(track.id)
-    setRows((current) => current.filter((row) => row.track.id !== track.id))
-    refreshLikes().catch(() => {})
+  const unlike = (track) => {
+    pushToast('Removed from Liked Songs', track)
+    toggleLike(track.id, track).catch(() => pushToast("Couldn't update Liked Songs", track))
   }
 
   return (
@@ -66,7 +79,7 @@ const LikedSongs = () => {
       ) : error ? (
         <StatusMessage title="Could not load likes" body={error} />
       ) : tracks.length === 0 ? (
-        <StatusMessage title="Songs you like live here" body="Tap the heart on any track to save it." />
+        <StatusMessage title="Songs you like live here" body="Tap + on a song to save it here." />
       ) : (
         <div className="mt-8 pb-8">
           {rows.map((row, index) => (
