@@ -1,14 +1,14 @@
 import type { Request, Response } from 'express'
 import { badRequest } from '../../shared/errors.js'
-import { pageQuerySchema } from '../../shared/pagination.js'
 import { sendData, sendPage } from '../../shared/response.js'
 import { idParamsSchema, parse } from '../../shared/validate.js'
-import { updateTrackSchema } from './tracks.schemas.js'
+import { listTracksQuerySchema, updateTrackSchema } from './tracks.schemas.js'
 import { tracksService } from './tracks.service.js'
 
 export const tracksController = {
   async list(req: Request, res: Response) {
-    sendPage(res, await tracksService.list(parse(pageQuerySchema, req.query), req.actor ?? null))
+    const { artistId, ...page } = parse(listTracksQuerySchema, req.query)
+    sendPage(res, await tracksService.list(page, req.actor ?? null, { artistId }))
   },
 
   async get(req: Request, res: Response) {

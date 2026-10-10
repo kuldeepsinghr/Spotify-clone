@@ -12,7 +12,12 @@ import {
   type TempFile,
 } from '../../shared/temp-files.js'
 import { assertCanManageArtist } from '../artists/artists.access.js'
-import { tracksRepository, type NewTrack, type TrackRow } from './tracks.repository.js'
+import {
+  tracksRepository,
+  type NewTrack,
+  type TrackFilters,
+  type TrackRow,
+} from './tracks.repository.js'
 
 export type Track = TrackRow
 export type { NewTrack }
@@ -54,8 +59,11 @@ async function requireTrack(id: string) {
 }
 
 export const tracksService = {
-  async list(page: PageRequest, viewer: Viewer) {
-    const rows = await tracksRepository.list({ take: page.limit + 1, afterId: afterIdFrom(page) })
+  async list(page: PageRequest, viewer: Viewer, filters: TrackFilters = {}) {
+    const rows = await tracksRepository.list(
+      { take: page.limit + 1, afterId: afterIdFrom(page) },
+      filters,
+    )
     return pageForViewer(toIdPage(rows, page.limit), viewer)
   },
 

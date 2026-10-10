@@ -130,6 +130,17 @@ describe('GET /v1/tracks/:id', () => {
       artist: { id: artist.id },
     })
   })
+
+  it('filters the track list by artist', async () => {
+    const mine = await createArtist('Mine')
+    const other = await createArtist('Other')
+    await createTrack(await createAlbum(mine.id), 1, 'Kept')
+    await createTrack(await createAlbum(other.id), 1, 'Hidden')
+
+    const res = await request(app).get('/v1/tracks').query({ artistId: mine.id }).expect(200)
+    expect(res.body.data.map((t: { title: string }) => t.title)).toEqual(['Kept'])
+    await request(app).get('/v1/tracks?artistId=nope').expect(400)
+  })
 })
 
 describe('GET /v1/search', () => {

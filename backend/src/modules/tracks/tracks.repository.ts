@@ -22,6 +22,10 @@ export interface ListWindow {
   afterId?: string
 }
 
+export interface TrackFilters {
+  artistId?: string
+}
+
 export interface NewTrack {
   albumId: string
   artistId: string
@@ -33,8 +37,9 @@ export interface NewTrack {
 }
 
 export const tracksRepository = {
-  list: ({ take, afterId }: ListWindow) =>
+  list: ({ take, afterId }: ListWindow, { artistId }: TrackFilters = {}) =>
     prisma.track.findMany({
+      where: { ...(artistId && { artistId }) },
       select: trackSelect,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take,

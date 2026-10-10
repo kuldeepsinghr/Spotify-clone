@@ -314,7 +314,8 @@ cp backend/.env.example backend/.env    # Cloudinary keys, CORS origins, token s
 
 # 2. Postgres + API, with hot reload: edits in backend/src restart the server
 npm run dev              # or: npm start, to run in the background
-# API at http://localhost:4000/v1/health
+# API health check: http://127.0.0.1:4000/v1/health
+# (use 127.0.0.1; "localhost" is often IPv6 and Docker only publishes IPv4)
 
 # 3. Optional tools: pgAdmin at http://localhost:5050, Mailpit at http://localhost:8025
 npm run dev:tools
@@ -324,7 +325,7 @@ cd spotify-clone && npm install && npm run dev                    # http://local
 cd spotify-admin && npm install && npm run dev                    # http://localhost:5174
 ```
 
-Both apps default to `http://localhost:4000`. Copy `spotify-clone/.env.example` and `spotify-admin/.env.example` if you need a different API. CORS must include `http://localhost:5173` and `http://localhost:5174`. Create an admin with `npm run db:seed` before using the admin panel.
+In local dev, leave `VITE_API_URL` empty. Vite proxies `/v1` to `http://127.0.0.1:4000`, so the browser never calls `localhost:4000` directly. Set `VITE_API_URL` only when the API is on another host. CORS must include `http://localhost:5173` and `http://localhost:5174`. Create an admin with `npm run db:seed` before using the admin panel.
 
 ### Useful commands (from the repository root)
 

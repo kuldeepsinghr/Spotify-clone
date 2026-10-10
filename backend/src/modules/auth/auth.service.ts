@@ -30,23 +30,34 @@ const invalidRefresh = () =>
 const accountDisabled = () =>
   new AppError(403, ErrorCode.ACCOUNT_DISABLED, 'This account has been disabled')
 
-/** Starts a token family, or continues one when rotating. */
-async function issueSession(user: User, familyId: string = randomUUID()): Promise<Session> {
+/**
+ * Two tabs (or two apps on the same site) often refresh at the same moment with the same
+ * cookie. A token rotated less than this long ago may still be exchanged, as long as its
+ * family has not been revoked; older reuse is treated as theft.
+ */
+export const REFRESH_REUSE_GRACE_MS = 10_000
+
+function newToken(userId: string, familyId: string) {
   const { token, hash } = newRefreshToken()
-  const refreshTokenExpiresAt = new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * 86_400_000)
-  await authRepository.createRefreshToken({
-    userId: user.id,
-    tokenHash: hash,
-    familyId,
-    expiresAt: refreshTokenExpiresAt,
-  })
+  const expiresAt = new Date(Date.now() + env.REFRESH_TOKEN_TTL_DAYS * 86_400_000)
+  return { token, record: { userId, tokenHash: hash, familyId, expiresAt } }
+}
+
+async function toSession(user: User, token: string, expiresAt: Date): Promise<Session> {
   return {
     user,
     accessToken: await signAccessToken(user.id),
     accessTokenExpiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
     refreshToken: token,
-    refreshTokenExpiresAt,
+    refreshTokenExpiresAt: expiresAt,
   }
+}
+
+/** Starts a token family, or adds a token to an existing one. */
+async function issueSession(user: User, familyId: string = randomUUID()): Promise<Session> {
+  const { token, record } = newToken(user.id, familyId)
+  await authRepository.createRefreshToken(record)
+  return toSession(user, token, record.expiresAt)
 }
 
 export const authService = {
@@ -75,16 +86,12 @@ export const authService = {
   /**
    * Rotation: each refresh token works once. Presenting one that was already used means it
    * was copied, so the whole family is revoked and every device in it must sign in again.
+   * The exception is a concurrent refresh within REFRESH_REUSE_GRACE_MS (see above).
    */
   async refresh(refreshToken: string | undefined) {
     if (!refreshToken) throw invalidRefresh()
     const stored = await authRepository.findRefreshToken(hashRefreshToken(refreshToken))
     if (!stored) throw invalidRefresh()
-
-    if (stored.revokedAt || !(await authRepository.revokeIfActive(stored.id))) {
-      await authRepository.revokeFamily(stored.familyId)
-      throw new AppError(401, ErrorCode.REFRESH_TOKEN_REUSED, 'Session was revoked; sign in again')
-    }
     if (stored.expiresAt <= new Date()) throw invalidRefresh()
 
     const access = await usersService.getAccess(stored.userId)
@@ -93,7 +100,21 @@ export const authService = {
       await authRepository.revokeFamily(stored.familyId)
       throw accountDisabled()
     }
-    return issueSession(await usersService.getProfile(stored.userId), stored.familyId)
+
+    const user = await usersService.getProfile(stored.userId)
+    const next = newToken(user.id, stored.familyId)
+    const rotated = !stored.revokedAt && (await authRepository.rotate(stored.id, next.record))
+    if (rotated) return toSession(user, next.token, next.record.expiresAt)
+
+    const revokedAgoMs = stored.revokedAt ? Date.now() - stored.revokedAt.getTime() : 0
+    if (
+      revokedAgoMs <= REFRESH_REUSE_GRACE_MS &&
+      (await authRepository.familyHasActiveToken(stored.familyId))
+    ) {
+      return issueSession(user, stored.familyId)
+    }
+    await authRepository.revokeFamily(stored.familyId)
+    throw new AppError(401, ErrorCode.REFRESH_TOKEN_REUSED, 'Session was revoked; sign in again')
   },
 
   /** Ends this device's session. Unknown or already revoked tokens are fine: the goal is met. */

@@ -131,6 +131,10 @@ describe('refresh', () => {
   it('treats reuse of a rotated token as theft and revokes the whole family', async () => {
     const first = refreshCookie(await register())
     const second = refreshCookie(await refresh(first.pair).expect(200))
+    await prisma.refreshToken.updateMany({
+      where: { revokedAt: { not: null } },
+      data: { revokedAt: new Date(Date.now() - 11_000) },
+    })
 
     const reuse = await refresh(first.pair).expect(401)
     expect(reuse.body.error.code).toBe('REFRESH_TOKEN_REUSED')
@@ -138,6 +142,23 @@ describe('refresh', () => {
 
     const after = await refresh(second.pair).expect(401)
     expect(after.body.error.code).toBe('REFRESH_TOKEN_REUSED')
+  })
+
+  it('lets two tabs refresh with the same cookie at the same moment', async () => {
+    const cookie = refreshCookie(await register())
+    const [a, b] = await Promise.all([refresh(cookie.pair), refresh(cookie.pair)])
+    expect([a.status, b.status]).toEqual([200, 200])
+    await refresh(refreshCookie(a).pair).expect(200)
+    await refresh(refreshCookie(b).pair).expect(200)
+  })
+
+  it('a just-rotated token can still be exchanged, but not after logout', async () => {
+    const first = refreshCookie(await register())
+    const second = refreshCookie(await refresh(first.pair).expect(200))
+    await refresh(first.pair).expect(200)
+
+    await request(app).post('/v1/auth/logout').set('cookie', second.pair).expect(204)
+    expect((await refresh(first.pair).expect(401)).body.error.code).toBe('REFRESH_TOKEN_REUSED')
   })
 
   it('rejects missing, unknown and expired tokens', async () => {

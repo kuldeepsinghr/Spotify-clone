@@ -1,4 +1,9 @@
 import { z } from 'zod'
+import { pageQuerySchema } from '../../shared/pagination.js'
+
+export const listTracksQuerySchema = pageQuerySchema.extend({
+  artistId: z.string().uuid().optional(),
+})
 
 export const updateTrackSchema = z
   .object({
