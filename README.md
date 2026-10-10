@@ -162,16 +162,40 @@ Album color is a hex value. The listener uses it only as the album-page gradient
 
 ## How the API works
 
-`backend/src/app.ts` adds request logging (pino), secure headers (helmet), CORS limited to `CORS_ORIGINS`, and JSON body limits, then mounts `/v1` and the legacy `/api` routers. Every response uses one envelope:
+`backend/src/app.ts` adds request logging (pino), secure headers (helmet), CORS limited to `CORS_ORIGINS`, JSON body limits and cookie parsing, then mounts `/v1` and the legacy `/api` routers. Every response uses one envelope:
 
 ```json
 { "success": true, "data": ..., "meta": { "limit": 20, "nextCursor": "..." } }
 { "success": false, "error": { "code": "NOT_FOUND", "message": "Album not found" } }
 ```
 
-### `/v1` (read API, public)
+### Accounts and sign-in
+
+Roles are `user` (listener), `artist` (manages one linked artist profile) and `admin`. Anyone can register as a `user`; only admins change roles.
+
+- **Access token:** a 15-minute JWT returned in the response body. Send it as `Authorization: Bearer <token>`. Keep it in memory, not in `localStorage`.
+- **Refresh token:** an httpOnly cookie named `refresh_token`, sent only to `/v1/auth/*`. Each refresh replaces it. Presenting an old one again is treated as theft: every session descended from that sign-in is ended.
+- The role and the disabled flag are read from the database on every request, so admin changes apply immediately.
+- Passwords are hashed with argon2id: 10 to 128 characters, not a common password, and not containing your email name or display name.
+- Rate limits: 5 login attempts per minute per email and IP, a 15-minute lockout after 10 failures for one email, 10 registrations per hour per IP, and 30 refreshes per minute per IP. The counters are in memory, so they reset on restart.
+
+| Method | Path | Who | Result |
+| --- | --- | --- | --- |
+| `POST` | `/v1/auth/register` | anyone | `{ email, password, displayName }`; 201 with `{ user, accessToken, expiresIn }` and the cookie |
+| `POST` | `/v1/auth/login` | anyone | `{ email, password }`; same response. 401 `INVALID_CREDENTIALS`, 403 `ACCOUNT_DISABLED`, 429 `RATE_LIMITED` |
+| `POST` | `/v1/auth/refresh` | cookie | New access token and rotated cookie; 401 `REFRESH_TOKEN_INVALID` or `REFRESH_TOKEN_REUSED` |
+| `POST` | `/v1/auth/logout` | cookie | Ends this sign-in; 204 |
+| `POST` | `/v1/auth/logout-all` | signed in | Ends every session; 204 |
+| `GET`, `PATCH` | `/v1/me` | signed in | Profile; `PATCH` takes `displayName`, `avatarUrl` (https) |
+| `POST` | `/v1/me/password` | signed in | `{ currentPassword, newPassword }`; signs out other devices and returns a fresh session |
+
+The cookie routes reject requests whose `Origin` is not in `CORS_ORIGINS`. Create the first admin with `npm run db:seed` (see below).
+
+### `/v1` catalog
 
 Every list takes `limit` (1 to 100, default 20) and `cursor`; pass `meta.nextCursor` back to get the next page.
+
+Reads are public. Track responses depend on who asks. Signed-in listeners get the full `audioUrl`. Guests get a 30-second Cloudinary preview URL with `isPreview: true` and `previewMs`, or `audioUrl: null` when the file is not on Cloudinary and cannot be trimmed. The full file is still public on Cloudinary, so this is a product limit rather than copy protection.
 
 | Method | Path | Result |
 | --- | --- | --- |
@@ -186,11 +210,37 @@ Every list takes `limit` (1 to 100, default 20) and `cursor`; pass `meta.nextCur
 | `GET` | `/v1/tracks`, `/v1/tracks/:id` | Tracks with album and artist |
 | `GET` | `/v1/search?q=&type=all\|track\|album\|artist` | Substring and typo-tolerant search (PostgreSQL trigram indexes). One paged section per type; `cursor` needs a single `type`. |
 
-Write endpoints, sign-in, and roles arrive in milestone M4.
+Writes need a signed-in artist or admin. Artists can change only their own artist profile and its albums and tracks; admins can change anything. Uploads are multipart (`cover` and `image` up to 5 MB, `audio` up to 50 MB).
+
+| Method | Path | Who | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/v1/albums` | artist, admin | Fields `title`, `description`, `bgColor`, `releasedAt`, file `cover`. Admins must send `artistId`; artists publish under their own profile (403 `ARTIST_PROFILE_REQUIRED` if none is linked). |
+| `PATCH` | `/v1/albums/:id` | owner, admin | Any album field, optional new `cover`. Only admins may send `artistId`, which moves the album and its tracks. |
+| `DELETE` | `/v1/albums/:id` | owner, admin | 409 `ALBUM_HAS_TRACKS` if not empty |
+| `POST` | `/v1/albums/:id/tracks` | owner, admin | Fields `title`, `description`, file `audio`, optional `image` (defaults to the album cover). Gets the next track number. |
+| `PATCH`, `DELETE` | `/v1/tracks/:id` | owner, admin | Title, description, optional `image` |
+| `POST` | `/v1/artists` | admin | `name`, `bio`, optional `image` |
+| `PATCH` | `/v1/artists/:id` | owner, admin | `name`, `bio`, optional `image` |
+| `DELETE` | `/v1/artists/:id` | admin | 409 `ARTIST_HAS_ALBUMS` if it still has albums |
+
+### Admin
+
+All `/v1/admin` routes need the `admin` role.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/v1/admin/users?q=&role=` | Paged; `q` matches email or display name |
+| `GET` | `/v1/admin/users/:id` | One user with their linked artist |
+| `PATCH` | `/v1/admin/users/:id/role` | `{ role, artistId? }`. Making someone an artist links the given profile (409 `ARTIST_ALREADY_OWNED` if taken), the one they already own, or a new one named after them. Other roles unlink it. |
+| `PATCH` | `/v1/admin/users/:id/status` | `{ disabled }`. Disabling ends all their sessions. |
+
+The last active admin cannot be demoted or disabled (409 `LAST_ADMIN`), and admins cannot disable themselves.
 
 ### Legacy `/api` (current front ends)
 
 These keep the request and response shapes the two React apps already use, now backed by PostgreSQL. They are removed in M6.
+
+**Since M4 the four write routes need an admin access token.** The current admin app has no sign-in until M6, so pointed at this API it can list but not add or remove anything. The hosted production API is unaffected until this backend is deployed.
 
 | Method | Path | Body | Result |
 | --- | --- | --- | --- |
@@ -205,22 +255,23 @@ These keep the request and response shapes the two React apps already use, now b
 
 ### Data model
 
-PostgreSQL tables are defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma): `users`, `refresh_tokens`, `password_reset_tokens`, `artists`, `albums`, `tracks`, `playlists`, `playlist_tracks`, `liked_tracks`, `play_history`, `user_player_state`. Only the catalog tables are used by the API so far; the others are ready for M4 and M5.
+PostgreSQL tables are defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma): `users`, `refresh_tokens`, `password_reset_tokens`, `artists`, `albums`, `tracks`, `playlists`, `playlist_tracks`, `liked_tracks`, `play_history`, `user_player_state`. The library tables (`playlists`, `liked_tracks`, `play_history`, `user_player_state`) and `password_reset_tokens` are used from M5 on.
 
 ## Backend folders
 
 ```text
 backend/
 ├── prisma/             schema.prisma and migrations
-├── scripts/            backup-legacy-api, migrate-mongo (dry run, apply, verify)
+├── scripts/            backup-legacy-api, migrate-mongo (dry run, apply, verify), seed-admin
 ├── test/               integration tests against the spotify_test database
 └── src/
     ├── server.ts       starts the HTTP server, graceful shutdown
     ├── app.ts          middleware and routers
     ├── config/         validated environment, Cloudinary
-    ├── shared/         db client, logger, errors, response envelope, pagination, validation
-    ├── middleware/     error handler, uploads
-    └── modules/        health, artists, albums, tracks, search, legacy
+    ├── shared/         db client, logger, errors, response envelope, pagination, validation,
+    │                   passwords, tokens, guest previews
+    ├── middleware/     error handler, uploads, authenticate / requireRole, rate limits
+    └── modules/        health, auth, users (/me), admin, artists, albums, tracks, search, legacy
                         each: routes -> controller -> service -> repository
 ```
 
@@ -233,7 +284,7 @@ You need Docker Desktop and Node 22 or newer.
 ```bash
 # 1. Configuration (both files are git-ignored)
 cp .env.example .env                    # database passwords for docker compose; optional
-cp backend/.env.example backend/.env    # Cloudinary keys, CORS origins
+cp backend/.env.example backend/.env    # Cloudinary keys, CORS origins, token secrets for running outside Docker
 
 # 2. Postgres + API, with hot reload: edits in backend/src restart the server
 npm run dev              # or: npm start, to run in the background
@@ -258,6 +309,7 @@ To make the front ends use your local API, set `url` in `spotify-clone/src/conte
 | `npm run db:migrate` | Create and apply a new migration after editing `schema.prisma` |
 | `npm run db:reset` | Drop and re-create the database from migrations |
 | `npm run logs` | Follow API logs |
+| `SEED_ADMIN_EMAIL=... SEED_ADMIN_PASSWORD=... npm run db:seed` | Create the first admin, or promote an existing account (PowerShell: set `$env:SEED_ADMIN_EMAIL` and `$env:SEED_ADMIN_PASSWORD` first) |
 | `npm test` | Unit and integration tests; needs the `postgres` container running |
 | `npm run lint` | ESLint for the backend |
 

@@ -29,6 +29,14 @@ export interface NewAlbum {
   releasedAt?: Date
 }
 
+export interface AlbumChanges {
+  title?: string
+  description?: string
+  bgColor?: string
+  coverUrl?: string
+  releasedAt?: Date | null
+}
+
 export const albumsRepository = {
   list: ({ take, afterId }: ListWindow) =>
     prisma.album.findMany({
@@ -78,7 +86,23 @@ export const albumsRepository = {
     return rows.map((row) => row.id)
   },
 
+  countByArtist: (artistId: string) => prisma.album.count({ where: { artistId } }),
+
   create: (album: NewAlbum) => prisma.album.create({ data: album, select: albumSelect }),
+
+  update: (id: string, data: AlbumChanges) =>
+    prisma.album.update({ where: { id }, data, select: albumSelect }),
+
+  /**
+   * Moves an album and its tracks to another artist atomically. This is the one place a
+   * repository writes another module's table: tracks.artist_id must always equal the album's
+   * artist, and the two updates cannot be split across services without losing atomicity.
+   */
+  reassignArtist: (id: string, artistId: string, data: AlbumChanges) =>
+    prisma.$transaction(async (tx) => {
+      await tx.track.updateMany({ where: { albumId: id }, data: { artistId } })
+      return tx.album.update({ where: { id }, data: { ...data, artistId }, select: albumSelect })
+    }),
 
   delete: (id: string) => prisma.album.delete({ where: { id }, select: { id: true } }),
 }

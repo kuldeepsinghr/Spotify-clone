@@ -38,8 +38,36 @@ export const artistsRepository = {
       orderBy: { createdAt: 'asc' },
     }),
 
-  create: (data: { name: string; bio?: string }) =>
+  findByOwner: (userId: string) =>
+    prisma.artist.findUnique({ where: { ownerUserId: userId }, select: artistSelect }),
+
+  findOwnerUserId: async (id: string) =>
+    (await prisma.artist.findUnique({ where: { id }, select: { ownerUserId: true } }))?.ownerUserId,
+
+  create: (data: { name: string; bio?: string; imageUrl?: string; ownerUserId?: string }) =>
     prisma.artist.create({ data, select: artistSelect }),
+
+  update: (id: string, data: { name?: string; bio?: string; imageUrl?: string }) =>
+    prisma.artist.update({ where: { id }, data, select: artistSelect }),
+
+  /** Moves ownership in one transaction: the user's previous profile is released first. */
+  setOwner: (artistId: string, userId: string) =>
+    prisma.$transaction(async (tx) => {
+      await tx.artist.updateMany({
+        where: { ownerUserId: userId, id: { not: artistId } },
+        data: { ownerUserId: null },
+      })
+      return tx.artist.update({
+        where: { id: artistId },
+        data: { ownerUserId: userId },
+        select: artistSelect,
+      })
+    }),
+
+  releaseOwnership: (userId: string) =>
+    prisma.artist.updateMany({ where: { ownerUserId: userId }, data: { ownerUserId: null } }),
+
+  delete: (id: string) => prisma.artist.delete({ where: { id }, select: { id: true } }),
 
   /** Substring or fuzzy (trigram) match on the name, best match first. Uses artists_name_trgm_idx. */
   async searchIds({ query, take, skip }: SearchWindow) {

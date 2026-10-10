@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express'
-import { MAX_IMAGE_BYTES } from '../../middleware/upload.js'
 import { badRequest } from '../../shared/errors.js'
 import { parse } from '../../shared/validate.js'
 import { addAlbumBodySchema, addSongBodySchema, removeBodySchema } from './legacy.schemas.js'
@@ -21,11 +20,7 @@ export const legacyController = {
   async addAlbum(req: Request, res: Response) {
     if (!req.file) throw badRequest('image file is required')
     const body = parse(addAlbumBodySchema, req.body)
-    const album = await legacyService.addAlbum({
-      ...body,
-      image: req.file,
-      maxImageBytes: MAX_IMAGE_BYTES,
-    })
+    const album = await legacyService.addAlbum(req.actor!, { ...body, image: req.file })
     res.status(201).json({ success: true, message: 'album added', album })
   },
 
@@ -34,24 +29,23 @@ export const legacyController = {
     const audio = fieldFile(req, 'audio')
     if (!image || !audio) throw badRequest('image and audio files are required')
     const body = parse(addSongBodySchema, req.body)
-    const song = await legacyService.addSong({
+    const song = await legacyService.addSong(req.actor!, {
       name: body.name,
       desc: body.desc,
       albumName: body.album,
       image,
       audio,
-      maxImageBytes: MAX_IMAGE_BYTES,
     })
     res.status(201).json({ success: true, message: 'song added', song })
   },
 
   async removeSong(req: Request, res: Response) {
-    await legacyService.removeSong(parse(removeBodySchema, req.body).id)
+    await legacyService.removeSong(req.actor!, parse(removeBodySchema, req.body).id)
     res.json({ success: true, message: 'song removed' })
   },
 
   async removeAlbum(req: Request, res: Response) {
-    await legacyService.removeAlbum(parse(removeBodySchema, req.body).id)
+    await legacyService.removeAlbum(req.actor!, parse(removeBodySchema, req.body).id)
     res.json({ success: true, message: 'album removed' })
   },
 }

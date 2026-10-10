@@ -1,11 +1,48 @@
-import { AppError, ErrorCode, notFound } from '../../shared/errors.js'
+import { uploadMedia } from '../../config/cloudinary.js'
+import type { Actor, Viewer } from '../../shared/actor.js'
+import { AppError, ErrorCode, forbidden, notFound } from '../../shared/errors.js'
 import { afterIdFrom, toIdPage, type PageRequest } from '../../shared/pagination.js'
 import type { SearchWindow } from '../../shared/search.js'
+import {
+  assertMaxSize,
+  MAX_IMAGE_BYTES,
+  withCleanup,
+  type TempFile,
+} from '../../shared/temp-files.js'
+import {
+  assertArtistExists,
+  assertCanManageArtist,
+  resolveArtistForRelease,
+} from '../artists/artists.access.js'
 import { tracksService } from '../tracks/tracks.service.js'
-import { albumsRepository, type AlbumRow, type NewAlbum } from './albums.repository.js'
+import { albumsRepository, type AlbumRow } from './albums.repository.js'
 
 export type Album = AlbumRow
-export type { NewAlbum }
+
+export interface AlbumInput {
+  title: string
+  description: string
+  bgColor: string
+  releasedAt?: Date
+  artistId?: string
+  cover: TempFile
+}
+
+export interface AlbumUpdate {
+  title?: string
+  description?: string
+  bgColor?: string
+  releasedAt?: Date | null
+  artistId?: string
+  cover?: TempFile
+}
+
+export interface TrackInput {
+  title: string
+  description: string
+  audio: TempFile
+  image?: TempFile
+}
 
 const inIdOrder = (ids: string[], rows: Album[]) => {
   const byId = new Map(rows.map((row) => [row.id, row]))
@@ -16,6 +53,11 @@ async function requireAlbum(id: string) {
   const album = await albumsRepository.findById(id)
   if (!album) throw notFound('Album')
   return album
+}
+
+async function uploadImage(file: TempFile) {
+  assertMaxSize(file, MAX_IMAGE_BYTES, 'image')
+  return (await uploadMedia(file.path, 'image')).url
 }
 
 export const albumsService = {
@@ -30,9 +72,9 @@ export const albumsService = {
     return { ...album, ...(await tracksService.albumStats(id)) }
   },
 
-  async listTracks(albumId: string, page: PageRequest) {
+  async listTracks(albumId: string, page: PageRequest, viewer: Viewer) {
     await requireAlbum(albumId)
-    return tracksService.listByAlbum(albumId, page)
+    return tracksService.listByAlbum(albumId, page, viewer)
   },
 
   async listByArtist(artistId: string, page: PageRequest) {
@@ -42,6 +84,8 @@ export const albumsService = {
     })
     return toIdPage(rows, page.limit)
   },
+
+  countByArtist: (artistId: string) => albumsRepository.countByArtist(artistId),
 
   async search(window: SearchWindow) {
     const ids = await albumsRepository.searchIds(window)
@@ -60,11 +104,40 @@ export const albumsService = {
 
   listOldestFirst: (limit: number) => albumsRepository.listOldestFirst(limit),
 
-  create: (album: NewAlbum) => albumsRepository.create(album),
+  create: (actor: Actor, input: AlbumInput) =>
+    withCleanup([input.cover], async () => {
+      const artistId = await resolveArtistForRelease(actor, input.artistId)
+      return albumsRepository.create({
+        artistId,
+        title: input.title,
+        description: input.description,
+        bgColor: input.bgColor,
+        releasedAt: input.releasedAt,
+        coverUrl: await uploadImage(input.cover),
+      })
+    }),
+
+  /** Only admins can move an album to another artist; its tracks move with it. */
+  update: (actor: Actor, id: string, input: AlbumUpdate) =>
+    withCleanup([input.cover], async () => {
+      const album = await requireAlbum(id)
+      await assertCanManageArtist(actor, album.artist.id)
+
+      const { artistId, cover, ...fields } = input
+      const changes = { ...fields, coverUrl: cover ? await uploadImage(cover) : undefined }
+
+      if (artistId && artistId !== album.artist.id) {
+        if (actor.role !== 'admin') throw forbidden('Only admins can move albums between artists')
+        await assertArtistExists(artistId)
+        return albumsRepository.reassignArtist(id, artistId, changes)
+      }
+      return albumsRepository.update(id, changes)
+    }),
 
   /** Deleting an album that still has tracks is blocked; remove or move the tracks first. */
-  async remove(id: string) {
-    await requireAlbum(id)
+  async remove(actor: Actor, id: string) {
+    const album = await requireAlbum(id)
+    await assertCanManageArtist(actor, album.artist.id)
     const trackCount = await tracksService.countByAlbum(id)
     if (trackCount > 0) {
       throw new AppError(
@@ -75,4 +148,25 @@ export const albumsService = {
     }
     await albumsRepository.delete(id)
   },
+
+  /** Appends a track to the album. Without its own image, the track uses the album cover. */
+  addTrack: (actor: Actor, albumId: string, input: TrackInput) =>
+    withCleanup([input.audio, input.image], async () => {
+      const album = await requireAlbum(albumId)
+      await assertCanManageArtist(actor, album.artist.id)
+      if (input.image) assertMaxSize(input.image, MAX_IMAGE_BYTES, 'image')
+      const [audio, imageUrl] = await Promise.all([
+        uploadMedia(input.audio.path, 'audio'),
+        input.image ? uploadImage(input.image) : Promise.resolve(album.coverUrl),
+      ])
+      return tracksService.create({
+        albumId,
+        artistId: album.artist.id,
+        title: input.title,
+        description: input.description,
+        durationMs: audio.durationMs ?? 0,
+        audioUrl: audio.url,
+        imageUrl,
+      })
+    }),
 }

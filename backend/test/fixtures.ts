@@ -1,4 +1,6 @@
+import type { Role } from '../src/shared/actor.js'
 import { prisma } from '../src/shared/db.js'
+import { signAccessToken } from '../src/shared/tokens.js'
 
 export async function resetDatabase() {
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
@@ -46,9 +48,30 @@ export async function createTrack(
   })
 }
 
-export async function createUser() {
+export async function createUser(role: Role = 'user', options: { isDisabled?: boolean } = {}) {
   const n = unique()
   return prisma.user.create({
-    data: { email: `user${n}@test.dev`, passwordHash: 'not-a-real-hash', displayName: `User ${n}` },
+    data: {
+      email: `user${n}@test.dev`,
+      passwordHash: 'not-a-real-hash',
+      displayName: `User ${n}`,
+      role,
+      isDisabled: options.isDisabled ?? false,
+    },
   })
+}
+
+/** A user with a valid access token, ready for `.set('authorization', ...)`. */
+export async function signedIn(role: Role = 'user') {
+  const user = await createUser(role)
+  return { user, auth: `Bearer ${await signAccessToken(user.id)}` }
+}
+
+/** An artist-role user who owns a fresh artist profile. */
+export async function signedInArtist() {
+  const session = await signedIn('artist')
+  const artist = await prisma.artist.create({
+    data: { name: `Owned ${unique()}`, ownerUserId: session.user.id },
+  })
+  return { ...session, artist }
 }

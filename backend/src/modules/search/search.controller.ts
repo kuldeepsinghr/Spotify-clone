@@ -6,6 +6,9 @@ import { searchService } from './search.service.js'
 
 export const searchController = {
   async search(req: Request, res: Response) {
-    sendData(res, await searchService.search(parse(searchQuerySchema, req.query)))
+    sendData(
+      res,
+      await searchService.search(parse(searchQuerySchema, req.query), req.actor ?? null),
+    )
   },
 }

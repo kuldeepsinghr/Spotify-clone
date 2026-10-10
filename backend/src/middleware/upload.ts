@@ -3,13 +3,14 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import multer from 'multer'
 import { AppError, ErrorCode } from '../shared/errors.js'
-
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
-export const MAX_AUDIO_BYTES = 50 * 1024 * 1024
+import { MAX_AUDIO_BYTES } from '../shared/temp-files.js'
 
 const kindOf = (field: string) => (field === 'audio' ? 'audio' : 'image')
 
-/** Files land in the OS temp folder under random names; services delete them after upload. */
+/**
+ * Files land in the OS temp folder under random names; services delete them after upload.
+ * The per-file limit is the audio limit; services check the smaller image limit.
+ */
 export const upload = multer({
   storage: multer.diskStorage({
     destination: tmpdir(),

@@ -31,6 +31,9 @@ services:
       NODE_ENV: development
       PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-spotify}:${POSTGRES_PASSWORD:-spotify}@postgres:5432/${POSTGRES_DB:-spotify}?schema=public
+      # The API refuses to start in production with these dev-only- values.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-only-access-secret-change-me-0123456789}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-dev-only-refresh-secret-change-me-0123456789}
     ports:
       - '4000:4000'
     depends_on:

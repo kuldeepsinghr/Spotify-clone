@@ -427,7 +427,7 @@ Estimates assume part-time study (about 2 hours per day). Adjust to your pace.
 - [x] Write the compose file with Postgres, pgAdmin and the API service
 - [x] Add healthchecks, a named volume and the multi-stage API Dockerfile
 - [x] Prove: `docker compose up` gives a running API that connects to Postgres
-- [ ] Add scripts for reset, migrate and seed (reset and migrate done; the admin seed command is part of M4)
+- [x] Add scripts for reset, migrate and seed (the admin seed command arrived with M4)
 
 **M2: Schema and data migration (about 3 days)** (done)
 - [x] Finalise the table design in section 6 and review it once
@@ -445,14 +445,15 @@ Estimates assume part-time study (about 2 hours per day). Adjust to your pace.
 - [x] Add health and readiness endpoints
 - [x] Write the first service and integration tests (Vitest and Supertest instead of Jest; same API, simpler with TypeScript ES modules)
 
-**M4: Authentication and roles (about 5 days)**
-- [ ] Implement register, login, refresh with rotation, logout and logout-all
-- [ ] Implement the authenticate and authorize middleware
-- [ ] Add rate limiting and secure headers
-- [ ] Implement the admin seed command
-- [ ] Protect catalog write endpoints; add ownership checks for artists
-- [ ] Implement the admin user-management endpoints
-- [ ] Write the permission-matrix test: every route against every role
+**M4: Authentication and roles (about 5 days)** (done)
+- [x] Implement register, login, refresh with rotation, logout and logout-all (plus `/v1/me` and password change)
+- [x] Implement the authenticate and authorize middleware
+- [x] Add rate limiting and secure headers (express-rate-limit, in memory until Phase 1; helmet since M3)
+- [x] Implement the admin seed command (`npm run db:seed`)
+- [x] Protect catalog write endpoints; add ownership checks for artists (legacy writes are admin only)
+- [x] Implement the admin user-management endpoints
+- [x] Write the permission-matrix test: every route against every role (`test/permissions.int.test.ts`)
+- [x] Enforce the 30-second guest preview on `/v1` track responses
 
 **M5: Library APIs (about 4 days)**
 - [ ] Likes: like, unlike, list
@@ -517,7 +518,7 @@ Estimates assume part-time study (about 2 hours per day). Adjust to your pace.
 
 Answer these first; each one changes the plan slightly.
 
-**Answered so far:** 1 TypeScript; 2 a 30-second preview for guests (enforced in M4); 3 block with a clear message (409 `ALBUM_HAS_TRACKS`); 7 placeholder artist "Unknown Artist". Questions 4, 5 and 6 still use the recommendations.
+**Answered so far:** 1 TypeScript; 2 a 30-second preview for guests (enforced since M4); 3 block with a clear message (409 `ALBUM_HAS_TRACKS`); 7 placeholder artist "Unknown Artist". Questions 4, 5 and 6 still use the recommendations.
 
 | # | Question | Options | Recommendation |
 | --- | --- | --- | --- |

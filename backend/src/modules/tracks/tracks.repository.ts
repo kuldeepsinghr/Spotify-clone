@@ -110,5 +110,8 @@ export const tracksRepository = {
       })
     }),
 
+  update: (id: string, data: { title?: string; description?: string; imageUrl?: string }) =>
+    prisma.track.update({ where: { id }, data, select: trackSelect }),
+
   delete: (id: string) => prisma.track.delete({ where: { id }, select: { id: true } }),
 }

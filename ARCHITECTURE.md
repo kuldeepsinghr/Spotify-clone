@@ -44,13 +44,43 @@ flowchart LR
 | Module | Routes | Notes |
 | --- | --- | --- |
 | `health` | `/v1/health`, `/v1/ready` | Liveness never touches the database; readiness pings it |
-| `albums` | `/v1/albums`, `/:id`, `/:id/tracks` | Album totals come from `tracksService`; deleting an album with tracks returns 409 `ALBUM_HAS_TRACKS` |
-| `artists` | `/v1/artists`, `/:id`, `/:id/albums`, `/:id/top-tracks` | Owns the "Unknown Artist" placeholder |
-| `tracks` | `/v1/tracks`, `/:id` | New tracks get the next track number in their album |
+| `auth` | `/v1/auth/*` | Sessions: register, login, refresh rotation, logout. Owns `refresh_tokens`; reads accounts through `usersService` |
+| `users` | `/v1/me` | Accounts and profiles; enforces the last-admin rule |
+| `admin` | `/v1/admin/users*` | No repository; combines `usersService`, `artistsService` and `authService` |
+| `albums` | `/v1/albums`, `/:id`, `/:id/tracks` | Album totals come from `tracksService`; deleting an album with tracks returns 409 `ALBUM_HAS_TRACKS`; adding a track goes through here |
+| `artists` | `/v1/artists`, `/:id`, `/:id/albums`, `/:id/top-tracks` | Owns the "Unknown Artist" placeholder and artist ownership (`artists.access.ts`) |
+| `tracks` | `/v1/tracks`, `/:id` | New tracks get the next track number in their album; `forViewer` swaps in the guest preview |
 | `search` | `/v1/search` | No repository of its own; asks each catalog service to search |
-| `legacy` | `/api/song/*`, `/api/album/*` | Translates the old contract onto the services above |
+| `legacy` | `/api/song/*`, `/api/album/*` | Translates the old contract onto the services above; writes need an admin |
 
-Shared pieces in `src/shared`: the Prisma client (`db.ts`), pino logger, `AppError` and error codes, the response envelope, cursor pagination, and Zod validation. `src/middleware` holds the error handler, which maps `AppError`, Prisma, Multer, and body-parser errors to the envelope without leaking stack traces, and deletes temp upload files on failure.
+Shared pieces in `src/shared`: the Prisma client (`db.ts`), pino logger, `AppError` and error codes, the response envelope, cursor pagination, Zod validation, password hashing, token signing, temp-file cleanup and guest preview URLs. `src/middleware` holds the error handler (it maps `AppError`, Prisma, Multer and body-parser errors to the envelope without leaking stack traces, and deletes temp upload files on failure), uploads, rate limits, and authentication.
+
+Two deliberate exceptions to the layer rules:
+
+- `artists.access.ts` reads `artistsRepository` directly and is imported by the albums and tracks services. Going through `artistsService` would create an import cycle, because that service already uses theirs.
+- `albumsRepository.reassignArtist` also updates `tracks.artist_id` in the same transaction. A track's artist must always equal its album's artist, and splitting the update across two services would lose atomicity.
+
+### Authentication and authorization
+
+```mermaid
+sequenceDiagram
+  participant App
+  participant API
+  participant DB as PostgreSQL
+  App->>API: POST /v1/auth/login
+  API->>DB: verify argon2id hash, insert refresh token (HMAC-SHA256 hash, new family)
+  API-->>App: access JWT (15 min) in body, refresh token in httpOnly cookie (path /v1/auth)
+  App->>API: GET /v1/... with Authorization: Bearer
+  API->>DB: load role and disabled flag for the token's user
+  App->>API: POST /v1/auth/refresh (cookie)
+  API->>DB: revoke the presented token (only if still active), insert its successor in the same family
+  Note over API,DB: a token that was already revoked means it was copied: the whole family is revoked
+```
+
+- `authenticate` requires a valid token. `optionalAuthenticate` lets guests through but still rejects a bad token, so clients refresh instead of silently getting guest data. `requireRole(...)` is `authenticate` plus a role check: 401 for guests, 403 for other roles.
+- Ownership is checked in services (`assertCanManageArtist`), not in routes, because it needs the database.
+- The access token carries only the user ID. Role changes and disabling apply on the next request, at the cost of one indexed lookup per authenticated request.
+- Rate-limit counters are in memory and per instance. Phase 1 moves them to Redis.
 
 ### Pagination
 
@@ -183,6 +213,8 @@ Deleting a song or album removes the database row and leaves the Cloudinary file
 | Question | Decision |
 | --- | --- |
 | Backend language | TypeScript |
-| Can guests play music? | 30-second preview; enforced once accounts exist (M4) |
+| Can guests play music? | 30-second preview through Cloudinary's `du_30` transformation on every `/v1` track response. Legacy lists keep full URLs until M6. Not DRM: the full file stays public until Phase 2. |
+| Legacy write routes once accounts exist | Admin only (the old admin app regains writes when it gets sign-in in M6) |
+| Refresh token storage | httpOnly cookie scoped to `/v1/auth`; rotated on every use; stored as an HMAC so a database leak alone cannot replay tokens |
 | Deleting an album that has tracks | Blocked with 409 `ALBUM_HAS_TRACKS` |
 | Old songs without an artist | Placeholder "Unknown Artist", fixed later in the admin app |

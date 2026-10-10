@@ -11,6 +11,7 @@
     "db:migrate": "docker compose exec api npx prisma migrate dev",
     "db:reset": "docker compose exec api npx prisma migrate reset --force",
     "db:wipe": "docker compose down -v",
+    "db:seed": "docker compose exec -e SEED_ADMIN_EMAIL -e SEED_ADMIN_PASSWORD -e SEED_ADMIN_NAME api npm run db:seed",
     "migrate:mongo": "npm --prefix backend run migrate:mongo --",
     "test": "npm --prefix backend test",
     "lint": "npm --prefix backend run lint",

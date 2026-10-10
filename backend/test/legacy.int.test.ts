@@ -1,7 +1,14 @@
 import request from 'supertest'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../src/shared/db.js'
-import { createAlbum, createArtist, createTrack, resetDatabase } from './fixtures.js'
+import {
+  createAlbum,
+  createArtist,
+  createTrack,
+  resetDatabase,
+  signedIn,
+  signedInArtist,
+} from './fixtures.js'
 
 vi.mock('../src/config/cloudinary.js', () => ({
   uploadMedia: vi.fn(async (_path: string, kind: 'image' | 'audio') =>
@@ -17,11 +24,16 @@ const app = createApp()
 const png = Buffer.from('89504e470d0a1a0a', 'hex')
 const mp3 = Buffer.from('494433', 'hex')
 
-beforeEach(resetDatabase)
+let admin: string
+
+beforeEach(async () => {
+  await resetDatabase()
+  admin = (await signedIn('admin')).auth
+})
 afterAll(() => prisma.$disconnect())
 
 describe('legacy /api contract', () => {
-  it('lists songs and albums in the shapes the current apps read', async () => {
+  it('lists songs and albums in the shapes the current apps read, without signing in', async () => {
     const artist = await createArtist()
     const album = await createAlbum(artist.id, 'Top 50')
     const track = await createTrack(album, 1, 'Song 2', 185_000)
@@ -54,6 +66,7 @@ describe('legacy /api contract', () => {
   it('adds an album under the placeholder artist and a song by album name', async () => {
     const addedAlbum = await request(app)
       .post('/api/album/add')
+      .set('authorization', admin)
       .field('name', 'Fresh')
       .field('desc', 'New album')
       .field('bgColor', '#1db954')
@@ -72,6 +85,7 @@ describe('legacy /api contract', () => {
 
     const addedSong = await request(app)
       .post('/api/song/add')
+      .set('authorization', admin)
       .field('name', 'Opener')
       .field('desc', 'First song')
       .field('album', 'Fresh')
@@ -89,9 +103,30 @@ describe('legacy /api contract', () => {
     })
   })
 
+  it('requires an admin for every write', async () => {
+    const artist = await createArtist()
+    const album = await createAlbum(artist.id)
+    const user = (await signedIn('user')).auth
+    const owner = (await signedInArtist()).auth
+
+    const writes = [
+      () => request(app).post('/api/album/add').field('name', 'X'),
+      () => request(app).post('/api/song/add').field('name', 'X'),
+      () => request(app).post('/api/song/remove').send({ id: album.id }),
+      () => request(app).post('/api/album/remove').send({ id: album.id }),
+    ]
+    for (const write of writes) {
+      expect((await write()).status).toBe(401)
+      expect((await write().set('authorization', user)).status).toBe(403)
+      expect((await write().set('authorization', owner)).status).toBe(403)
+    }
+    expect(await prisma.album.count()).toBe(1)
+  })
+
   it('rejects uploads of the wrong type and unknown albums', async () => {
     const wrongType = await request(app)
       .post('/api/album/add')
+      .set('authorization', admin)
       .field('name', 'Bad')
       .attach('image', mp3, { filename: 'x.mp3', contentType: 'audio/mpeg' })
       .expect(415)
@@ -99,6 +134,7 @@ describe('legacy /api contract', () => {
 
     await request(app)
       .post('/api/song/add')
+      .set('authorization', admin)
       .field('name', 'Orphan')
       .field('album', 'none')
       .attach('image', png, { filename: 'art.png', contentType: 'image/png' })
@@ -111,24 +147,38 @@ describe('legacy /api contract', () => {
     const album = await createAlbum(artist.id)
     const track = await createTrack(album, 1)
 
-    const blocked = await request(app).post('/api/album/remove').send({ id: album.id }).expect(409)
+    const blocked = await request(app)
+      .post('/api/album/remove')
+      .set('authorization', admin)
+      .send({ id: album.id })
+      .expect(409)
     expect(blocked.body.error.code).toBe('ALBUM_HAS_TRACKS')
 
     await request(app)
       .post('/api/song/remove')
+      .set('authorization', admin)
       .send({ id: track.id })
       .expect(200, { success: true, message: 'song removed' })
-    await request(app).post('/api/album/remove').send({ id: album.id }).expect(200)
+    await request(app)
+      .post('/api/album/remove')
+      .set('authorization', admin)
+      .send({ id: album.id })
+      .expect(200)
     expect(await prisma.album.count()).toBe(0)
   })
 
   it('returns 400 for malformed JSON and IDs', async () => {
     const malformed = await request(app)
       .post('/api/song/remove')
+      .set('authorization', admin)
       .set('content-type', 'application/json')
       .send('{"id":')
       .expect(400)
     expect(malformed.body.error.code).toBe('MALFORMED_JSON')
-    await request(app).post('/api/song/remove').send({ id: '42' }).expect(400)
+    await request(app)
+      .post('/api/song/remove')
+      .set('authorization', admin)
+      .send({ id: '42' })
+      .expect(400)
   })
 })
