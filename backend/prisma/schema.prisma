@@ -1,0 +1,226 @@
+// Phase 0 data model. Table and column names are snake_case in PostgreSQL, camelCase in code.
+// IDs are UUIDv7 so they sort by creation time.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  user
+  artist
+  admin
+}
+
+enum RepeatMode {
+  off
+  all
+  one
+}
+
+model User {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  /// Stored lowercase; the app normalises before writing.
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  displayName     String    @map("display_name")
+  avatarUrl       String?   @map("avatar_url")
+  role            Role      @default(user)
+  isDisabled      Boolean   @default(false) @map("is_disabled")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  artist              Artist?
+  playlists           Playlist[]
+  likedTracks         LikedTrack[]
+  playHistory         PlayHistory[]
+  playerState         UserPlayerState?
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  /// Every rotation keeps the family; reuse of a revoked token revokes the whole family.
+  familyId  String    @map("family_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+/// Used by the P3 forgot-password flow.
+model PasswordResetToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model Artist {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String
+  bio         String   @default("")
+  imageUrl    String?  @map("image_url")
+  /// The user account that manages this artist profile, if any.
+  ownerUserId String?  @unique @map("owner_user_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner  User?   @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  albums Album[]
+  tracks Track[]
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "artists_name_trgm_idx")
+  @@map("artists")
+}
+
+model Album {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  artistId      String    @map("artist_id") @db.Uuid
+  title         String
+  description   String    @default("")
+  bgColor       String    @default("#121212") @map("bg_color")
+  coverUrl      String    @map("cover_url")
+  releasedAt    DateTime? @map("released_at") @db.Date
+  /// Temporary trace back to the MongoDB document; drop in Phase 1.
+  legacyMongoId String?   @unique @map("legacy_mongo_id")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // Restrict: an artist with albums cannot be deleted
+  artist Artist  @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  tracks Track[]
+
+  @@index([artistId, releasedAt(sort: Desc)])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "albums_title_trgm_idx")
+  @@map("albums")
+}
+
+model Track {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  albumId       String   @map("album_id") @db.Uuid
+  artistId      String   @map("artist_id") @db.Uuid
+  title         String
+  description   String   @default("")
+  trackNumber   Int      @map("track_number")
+  durationMs    Int      @map("duration_ms")
+  audioUrl      String   @map("audio_url")
+  imageUrl      String   @map("image_url")
+  /// Temporary trace back to the MongoDB document; drop in Phase 1.
+  legacyMongoId String?  @unique @map("legacy_mongo_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // Restrict: deleting an album that still has tracks is blocked (decision 3 in the plan)
+  album         Album             @relation(fields: [albumId], references: [id], onDelete: Restrict)
+  artist        Artist            @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  playlistItems PlaylistTrack[]
+  likes         LikedTrack[]
+  plays         PlayHistory[]
+  playerStates  UserPlayerState[]
+
+  @@unique([albumId, trackNumber])
+  @@index([artistId])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "tracks_title_trgm_idx")
+  @@map("tracks")
+}
+
+model Playlist {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  ownerId     String   @map("owner_id") @db.Uuid
+  name        String
+  description String   @default("")
+  coverUrl    String?  @map("cover_url")
+  isPublic    Boolean  @default(false) @map("is_public")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner  User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tracks PlaylistTrack[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  playlistId String   @map("playlist_id") @db.Uuid
+  trackId    String   @map("track_id") @db.Uuid
+  position   Int
+  addedAt    DateTime @default(now()) @map("added_at") @db.Timestamptz(3)
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track    Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([playlistId, trackId])
+  @@index([playlistId, position])
+  @@index([trackId])
+  @@map("playlist_tracks")
+}
+
+model LikedTrack {
+  userId  String   @map("user_id") @db.Uuid
+  trackId String   @map("track_id") @db.Uuid
+  likedAt DateTime @default(now()) @map("liked_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([userId, trackId])
+  @@index([userId, likedAt(sort: Desc)])
+  @@index([trackId])
+  @@map("liked_tracks")
+}
+
+model PlayHistory {
+  id       String   @id @default(uuid(7)) @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  trackId  String   @map("track_id") @db.Uuid
+  playedAt DateTime @default(now()) @map("played_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([userId, playedAt(sort: Desc)])
+  @@index([trackId])
+  @@map("play_history")
+}
+
+model UserPlayerState {
+  userId      String     @id @map("user_id") @db.Uuid
+  lastTrackId String?    @map("last_track_id") @db.Uuid
+  /// 0 to 100
+  volume      Int        @default(100)
+  positionMs  Int        @default(0) @map("position_ms")
+  repeatMode  RepeatMode @default(off) @map("repeat_mode")
+  shuffle     Boolean    @default(false)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastTrack Track? @relation(fields: [lastTrackId], references: [id], onDelete: SetNull)
+
+  @@map("user_player_state")
+}

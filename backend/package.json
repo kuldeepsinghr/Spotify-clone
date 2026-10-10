@@ -22,7 +22,7 @@
     "db:studio": "prisma studio",
     "backup:legacy": "tsx scripts/backup-legacy-api.ts",
     "migrate:mongo": "tsx scripts/migrate-mongo.ts",
-    "verify:migration": "tsx scripts/verify-migration.ts"
+    "verify:migration": "tsx scripts/migrate-mongo.ts --verify-only"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
