@@ -8,21 +8,15 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 
 const Shell = () => {
-  const { audioRef, track, catalogReady } = useContext(PlayerContext)
+  const { audioRef, track } = useContext(PlayerContext)
 
   return (
     <div className="bg-black h-screen">
-      {!catalogReady ? (
-        <div className="text-white flex items-center justify-center h-full">Loading songs...</div>
-      ) : (
-        <>
-          <div className="h-[95%] flex">
-            <Sidebar />
-            <Display />
-          </div>
-          <Player />
-        </>
-      )}
+      <div className="h-[95%] flex">
+        <Sidebar />
+        <Display />
+      </div>
+      <Player />
       <audio ref={audioRef} preload="auto" src={track?.audioUrl || ''} />
     </div>
   )

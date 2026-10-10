@@ -10,7 +10,7 @@ Architecture diagrams and data flow live in [ARCHITECTURE.md](ARCHITECTURE.md). 
 
 ```text
 Spotify-clone/
-├── spotify-clone/     Listener UI (React + Vite). Home, album pages, player.
+├── spotify-clone/     Listener UI (React + Vite). Home, search, library, player.
 ├── spotify-admin/     Admin UI (React + Vite). Add and remove albums and songs.
 ├── backend/           Express API (TypeScript). PostgreSQL via Prisma, Cloudinary uploads.
 ├── docker/            Init files for the Postgres and pgAdmin containers.
@@ -53,9 +53,9 @@ flowchart TB
   subgraph listener [spotify-clone]
     Main["main.jsx<br/>BrowserRouter + PlayerContextProvider"]
     App["App.jsx<br/>Sidebar + Display + Player + audio"]
-    Home["DisplayHome<br/>Featured Charts and Today's biggest hits"]
-    AlbumPage["DisplayAlbum<br/>/album/:id"]
-    PlayerBar["Player<br/>play, pause, seek, next, previous"]
+    Home["DisplayHome<br/>Recently played, charts, hits"]
+    AlbumPage["Album, artist, playlist, liked, search"]
+    PlayerBar["Player<br/>queue, volume, shuffle, repeat"]
   end
 
   subgraph adminApp [spotify-admin]
@@ -97,7 +97,7 @@ flowchart TB
 
 ## How the listener works
 
-`AuthContext` holds the signed-in user. The access token stays in memory; a silent `POST /v1/auth/refresh` on load (and again after a 401) uses the httpOnly cookie. `PlayerContext` is only for playback: it loads `/v1` albums and tracks after auth is ready so guests get preview URLs and signed-in listeners get the full track.
+`AuthContext` holds the signed-in user. The access token stays in memory; a silent `POST /v1/auth/refresh` on load (and again after a 401) uses the httpOnly cookie. `LibraryContext` loads likes and the sidebar playlists. `PlayerContext` is only for playback: queue, volume, shuffle, repeat, and the last-heard track for signed-in listeners.
 
 ```mermaid
 sequenceDiagram
@@ -106,27 +106,20 @@ sequenceDiagram
   participant API as Express
   participant CDN as Cloudinary
 
-  UI->>Ctx: mount after auth is ready
-  Ctx->>API: GET /v1/tracks and GET /v1/albums
-  API-->>Ctx: tracks (preview or full audio) and albums
-  Ctx-->>UI: songsData, albumData, first track
-  UI->>UI: render home rows
-  Note over UI: user clicks a song card or an album track
-  UI->>Ctx: playTrack(track)
-  Ctx->>Ctx: setTrack(selected song)
+  UI->>Ctx: playTracks(list, index)
+  Ctx->>Ctx: set queue, current track, play order
   Ctx->>CDN: audio.src = track.audioUrl
   CDN-->>UI: audio stream
   UI->>UI: timeupdate moves the seek bar
+  Note over Ctx,API: signed-in: PATCH /v1/me/player and POST /v1/me/history after 30s
 ```
 
-1. `main.jsx` wraps the app in `BrowserRouter`, `AuthProvider` and `PlayerContextProvider`.
-2. Auth restores the session with `POST /v1/auth/refresh`. The catalog then loads from `/v1`. Guests hear a 30-second preview when Cloudinary can trim the file.
-3. `/login` and `/signup` create a session. `/profile` is signed-in only. The navbar shows Log in / Sign up or the account initial and Log out.
-4. **Home (`/`)** shows albums under “Featured Charts” and songs under “Today's biggest hits”.
-5. `/album/:id` loads that album and its tracks from `/v1`. The display paints a gradient from `bgColor`. A row click plays that track.
-6. Changing `track` sets `audio.src` to `audioUrl` and calls `play()`. Next and previous walk the home track list. The seek bar still sets `currentTime`.
-
-Search, library, playlist, and player extras (shuffle, volume, likes) are still layout only until M7.
+1. `main.jsx` wraps the app in `BrowserRouter`, `AuthProvider`, `LibraryProvider` and `PlayerContextProvider`.
+2. Auth restores the session with `POST /v1/auth/refresh`. Pages load their own `/v1` data. Guests hear a 30-second preview when Cloudinary can trim the file.
+3. `/login` and `/signup` create a session. `/profile` and `/liked` are signed-in only. The navbar search box goes to `/search?q=`.
+4. **Home (`/`)** shows recently played (when signed in), albums under “Featured Charts”, and songs under “Today's biggest hits”.
+5. `/album/:id` and `/artist/:id` load catalog pages. `/playlist/:id` is public when the playlist is public. `/liked` lists saved tracks. A 404 page covers unknown routes.
+6. Play starts a queue. Next and previous follow shuffle and repeat. Volume, mute, the queue panel, and like hearts call `/v1`. Space and the arrow keys control the player. Signed-in state is stored on `GET`/`PATCH /v1/me/player`.
 
 ## How the admin works
 

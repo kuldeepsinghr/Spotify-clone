@@ -1,3 +1,4 @@
+import Navbar from '../components/Navbar'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const Profile = () => {
@@ -5,7 +6,9 @@ const Profile = () => {
   if (!user) return null
 
   return (
-    <div className="mt-10 max-w-lg">
+    <>
+      <Navbar />
+      <div className="mt-10 max-w-lg">
       <p className="text-sm text-[#a7a7a7]">Account</p>
       <h1 className="text-4xl font-bold mt-2">{user.displayName}</h1>
       <dl className="mt-8 grid grid-cols-[8rem_1fr] gap-y-3 text-sm">
@@ -21,6 +24,7 @@ const Profile = () => {
         ) : null}
       </dl>
     </div>
+    </>
   )
 }
 

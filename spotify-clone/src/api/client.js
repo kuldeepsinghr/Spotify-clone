@@ -47,13 +47,18 @@ api.interceptors.response.use(
   },
 )
 
+export async function fetchPage(path, { params = {}, cursor } = {}) {
+  const { data } = await api.get(path, { params: { ...params, cursor } })
+  return { items: data.data, nextCursor: data.meta?.nextCursor ?? null, meta: data.meta }
+}
+
 export async function fetchAll(path, { max = 500, params = {} } = {}) {
   const items = []
   let cursor
   do {
-    const { data } = await api.get(path, { params: { ...params, limit: 100, cursor } })
-    items.push(...data.data)
-    cursor = data.meta?.nextCursor
+    const page = await fetchPage(path, { params: { ...params, limit: 100 }, cursor })
+    items.push(...page.items)
+    cursor = page.nextCursor
   } while (cursor && items.length < max)
   return items
 }

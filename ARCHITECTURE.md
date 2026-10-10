@@ -155,7 +155,7 @@ Spotify-clone/
 
 ## Playback
 
-`PlayerContext` owns songs, albums, the current track, play state, and seek time. Every playback control reads that context.
+`PlayerContext` owns the current track, the queue, volume, shuffle, repeat, and seek time. Catalog and library pages fetch their own `/v1` data. `LibraryContext` keeps liked-track IDs and the sidebar playlist list.
 
 ```mermaid
 sequenceDiagram
@@ -164,27 +164,22 @@ sequenceDiagram
   participant API as Express
   participant CDN as Cloudinary
 
-  UI->>Ctx: mount after auth restore
-  Ctx->>API: GET /v1/tracks and GET /v1/albums
-  API-->>Ctx: songs and albums
-  Ctx-->>UI: songsData, albumData, first track
-  UI->>UI: render home rows
-  Note over UI: user clicks a song card or an album track
-  UI->>Ctx: playTrack(track)
-  Ctx->>Ctx: setTrack(selected song)
+  UI->>Ctx: playTracks(list, index)
+  Ctx->>Ctx: set queue and current track
   Ctx->>CDN: audio.src = track.audioUrl
   CDN-->>UI: audio stream
   UI->>UI: timeupdate moves the seek bar
+  Ctx->>API: PATCH /v1/me/player and POST /v1/me/history
 ```
 
 | Step | Where | What happens |
 | --- | --- | --- |
-| 1 | `main.jsx` | `BrowserRouter`, `AuthProvider`, `PlayerContextProvider`. |
+| 1 | `main.jsx` | `BrowserRouter`, `AuthProvider`, `LibraryProvider`, `PlayerContextProvider`. |
 | 2 | `AuthContext` | Restores the session from the refresh cookie; access token stays in memory. |
-| 3 | `PlayerContext` | Loads `/v1` catalogs after auth is ready and sets the first song as `track`. |
-| 4 | `/` | Albums in “Featured Charts”. Songs in “Today's biggest hits”. |
-| 5 | `/album/:id` | Gradient from `bgColor`. Tracks from `GET /v1/albums/:id/tracks`. |
-| 6 | `Player` | Play, pause, next, previous, and seek drive the audio element. |
+| 3 | Pages | Home, album, artist, search, liked, and playlist each load `/v1` lists. |
+| 4 | `/` | Recently played, featured albums, and biggest hits. |
+| 5 | `/album/:id`, `/artist/:id` | Album gradient and artist top tracks plus albums. |
+| 6 | `Player` | Play, pause, next, previous, seek, volume, mute, shuffle, repeat, queue, and like. |
 
 ## Upload
 

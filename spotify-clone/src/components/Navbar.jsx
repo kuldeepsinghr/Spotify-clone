@@ -1,15 +1,30 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const Navbar = () => {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [params] = useSearchParams()
   const { user, signedIn, logout } = useAuth()
   const initial = (user?.displayName ?? '?').trim().charAt(0).toUpperCase()
+  const urlQuery = location.pathname === '/search' ? (params.get('q') ?? '') : ''
+  const [query, setQuery] = useState(urlQuery)
+
+  useEffect(() => {
+    setQuery(urlQuery)
+  }, [urlQuery])
+
+  const onSearch = (event) => {
+    event.preventDefault()
+    const q = query.trim()
+    navigate(q ? `/search?q=${encodeURIComponent(q)}` : '/search')
+  }
 
   return (
     <>
-      <div className="w-full flex justify-between items-center font-semibold">
+      <div className="w-full flex justify-between items-center font-semibold gap-4">
         <div className="flex items-center gap-2">
           <img
             onClick={() => navigate(-1)}
@@ -24,6 +39,16 @@ const Navbar = () => {
             className="w-8 bg-black p-2 rounded-full cursor-pointer"
           />
         </div>
+
+        <form onSubmit={onSearch} className="flex-1 max-w-md">
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="What do you want to play?"
+            className="w-full bg-[#242424] rounded-full px-4 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-white"
+          />
+        </form>
 
         <div className="flex items-center gap-3">
           {signedIn ? (
@@ -55,11 +80,6 @@ const Navbar = () => {
             </>
           )}
         </div>
-      </div>
-
-      <div className="flex items-center gap-2 mt-4">
-        <p className="bg-white text-black rounded-2xl px-4 py-1">All</p>
-        <p className="bg-black px-4 py-1 rounded-2xl">Music</p>
       </div>
     </>
   )
