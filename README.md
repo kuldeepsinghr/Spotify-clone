@@ -333,6 +333,8 @@ In local dev, leave `VITE_API_URL` empty. Vite proxies `/v1` to `http://127.0.0.
 | --- | --- |
 | `npm run stop` | Stop the containers; data is kept in the `pgdata` volume |
 | `npm run db:wipe` | Stop and delete all volumes (database starts empty) |
+| `npm run db:dump` | Export the local Postgres catalog to `backups/spotify-db.sql` (git-ignored) |
+| `npm run db:restore` | Load `backups/spotify-db.sql` into the running Postgres container |
 | `npm run db:migrate` | Create and apply a new migration after editing `schema.prisma` |
 | `npm run db:reset` | Drop and re-create the database from migrations |
 | `npm run logs` | Follow API logs |
