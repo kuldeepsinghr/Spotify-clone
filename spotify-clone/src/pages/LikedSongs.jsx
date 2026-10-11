@@ -87,7 +87,7 @@ const LikedSongs = () => {
               key={`${row.track.id}-${row.likedAt}`}
               track={row.track}
               index={index}
-              onPlay={() => playTracks(tracks, index)}
+              onPlay={() => playTracks(tracks, index, { type: 'liked' })}
               onRemove={unlike}
               removeLabel="Unlike"
             />

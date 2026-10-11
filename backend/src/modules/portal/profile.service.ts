@@ -1,0 +1,15 @@
+export {
+  completeness,
+  toProfile,
+  loadProfile,
+  ownedArtist,
+  assertWritable,
+  updateProfile,
+  submitProfile,
+  setImage,
+  addGalleryImage,
+  removeGalleryImage,
+  suggestSlug,
+  type ArtistProfile,
+  type ProfilePatch,
+} from './profile.repository.js'

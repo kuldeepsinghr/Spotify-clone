@@ -40,6 +40,8 @@ const PlayerContextProvider = (props) => {
   const [queue, setQueue] = useState([])
   const [playOrder, setPlayOrder] = useState([0])
   const [queueIndex, setQueueIndex] = useState(0)
+  /** Where the current queue was started from, e.g. { type: 'album'|'playlist'|'liked', id? }. */
+  const [playSource, setPlaySource] = useState(null)
   const [playStatus, setPlayStatus] = useState(false)
   const [volume, setVolume] = useState(80)
   const [muted, setMuted] = useState(false)
@@ -69,11 +71,12 @@ const PlayerContextProvider = (props) => {
   }, [])
 
   const playTracks = useCallback(
-    (list, startIndex = 0) => {
+    (list, startIndex = 0, source = null) => {
       const tracks = (list ?? []).filter(Boolean)
       if (!tracks.length) return
       const index = Math.min(Math.max(startIndex, 0), tracks.length - 1)
       userStarted.current = true
+      setPlaySource(source ?? null)
       const order = shuffleRef.current ? shuffleOrder(tracks.length, index) : tracks.map((_, i) => i)
       applyTrack(tracks[index], tracks, index, order, true)
     },
@@ -91,7 +94,7 @@ const PlayerContextProvider = (props) => {
         applyTrack(current[existing], current, existing, order, true)
         return
       }
-      playTracks([selected], 0)
+      playTracks([selected], 0, null)
     },
     [applyTrack, playTracks],
   )
@@ -429,6 +432,7 @@ const PlayerContextProvider = (props) => {
       track,
       queue,
       queueIndex,
+      playSource,
       playStatus,
       time,
       volume,
@@ -458,6 +462,7 @@ const PlayerContextProvider = (props) => {
       track,
       queue,
       queueIndex,
+      playSource,
       playStatus,
       time,
       volume,

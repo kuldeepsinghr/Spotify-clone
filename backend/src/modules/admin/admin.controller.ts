@@ -20,7 +20,7 @@ export const adminController = {
 
   async setRole(req: Request, res: Response) {
     const { id } = parse(idParamsSchema, req.params)
-    sendData(res, await adminService.setRole(id, parse(setRoleSchema, req.body ?? {})))
+    sendData(res, await adminService.setRole(req.actor!, id, parse(setRoleSchema, req.body ?? {})))
   },
 
   async setStatus(req: Request, res: Response) {

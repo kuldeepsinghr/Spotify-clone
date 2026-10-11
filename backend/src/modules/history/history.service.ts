@@ -23,7 +23,7 @@ export const historyService = {
     if (last && Date.now() - last.playedAt.getTime() < DUPLICATE_WINDOW_MS) {
       return { recorded: false, reason: 'DUPLICATE' }
     }
-    const play = await historyRepository.create(actor.id, input.trackId)
+    const play = await historyRepository.create(actor.id, input.trackId, input.playedMs)
     return { recorded: true, id: play.id, playedAt: play.playedAt }
   },
 

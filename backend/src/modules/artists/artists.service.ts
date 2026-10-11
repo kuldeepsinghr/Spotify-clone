@@ -35,15 +35,25 @@ export const artistsService = {
     return toIdPage(rows, page.limit)
   },
 
-  get: (id: string) => requireArtist(id),
+  async get(id: string) {
+    const artist = await artistsRepository.findPublicById(id)
+    if (!artist) throw notFound('Artist')
+    return withPublicDetails(artist)
+  },
+
+  async getBySlug(slug: string) {
+    const artist = await artistsRepository.findPublicBySlug(slug)
+    if (!artist) throw notFound('Artist')
+    return withPublicDetails(artist)
+  },
 
   async listAlbums(artistId: string, page: PageRequest) {
-    await requireArtist(artistId)
+    if (!(await artistsRepository.findPublicById(artistId))) throw notFound('Artist')
     return albumsService.listByArtist(artistId, page)
   },
 
   async topTracks(artistId: string, limit: number, viewer: Viewer) {
-    await requireArtist(artistId)
+    if (!(await artistsRepository.findPublicById(artistId))) throw notFound('Artist')
     return tracksService.topByArtist(artistId, limit, viewer)
   },
 
@@ -126,4 +136,23 @@ export const artistsService = {
   },
 
   releaseOwnership: (userId: string) => artistsRepository.releaseOwnership(userId),
+}
+
+async function withPublicDetails(artist: ArtistRow) {
+  const [extra, monthlyListeners] = await Promise.all([
+    artistsRepository.publicDetails(artist.id),
+    artistsRepository.monthlyListeners(artist.id),
+  ])
+  return {
+    ...artist,
+    longBio: extra?.longBio ?? '',
+    languages: extra?.languages ?? [],
+    yearFormed: extra?.yearFormed ?? null,
+    links: extra?.links ?? [],
+    members: extra?.members ?? [],
+    gallery: extra?.gallery ?? [],
+    genres: extra?.genres.map((row) => row.genre) ?? [],
+    releaseCount: extra?._count.albums ?? 0,
+    monthlyListeners,
+  }
 }

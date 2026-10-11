@@ -1,6 +1,9 @@
 import { Router } from 'express'
+import { authenticate } from './middleware/auth.js'
 import { createAuthRateLimits, createPlayRateLimit } from './middleware/rate-limit.js'
 import { adminRouter } from './modules/admin/admin.routes.js'
+import { reportsController } from './modules/moderation/moderation.controller.js'
+import { portalRouter } from './modules/portal/portal.routes.js'
 import { albumsRouter } from './modules/albums/albums.routes.js'
 import { artistsRouter } from './modules/artists/artists.routes.js'
 import { createAuthRouter } from './modules/auth/auth.routes.js'
@@ -25,6 +28,8 @@ export function createV1Router() {
   v1Router.use('/me/player', playerRouter)
   v1Router.use('/me', meRouter)
   v1Router.use('/admin', adminRouter)
+  v1Router.use('/portal', portalRouter)
+  v1Router.post('/reports', authenticate, reportsController.create)
   v1Router.use('/albums', albumsRouter)
   v1Router.use('/artists', artistsRouter)
   v1Router.use('/tracks', tracksRouter)

@@ -3,6 +3,7 @@ import { sendData } from '../../shared/response.js'
 import { parse } from '../../shared/validate.js'
 import { authService } from '../auth/auth.service.js'
 import { sendSession } from '../auth/session-cookie.js'
+import { changeEmailSchema } from '../auth/auth.schemas.js'
 import { changePasswordSchema, updateProfileSchema } from './users.schemas.js'
 import { usersService } from './users.service.js'
 
@@ -24,5 +25,9 @@ export const meController = {
       res,
       await authService.changePassword(req.actor!, parse(changePasswordSchema, req.body)),
     )
+  },
+
+  async changeEmail(req: Request, res: Response) {
+    sendData(res, await authService.changeEmail(req.actor!, parse(changeEmailSchema, req.body)))
   },
 }

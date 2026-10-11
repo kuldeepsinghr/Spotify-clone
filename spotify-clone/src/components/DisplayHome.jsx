@@ -5,11 +5,13 @@ import { libraryApi } from '../api/library.js'
 import { apiMessage } from '../api/errors.js'
 import AlbumItem from './AlbumItem'
 import Navbar from './Navbar'
+import PlayingBars from './PlayingBars'
 import PlaylistArt from './PlaylistArt'
 import SongItem from './SongItem'
 import StatusMessage from './StatusMessage'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLibrary } from '../context/LibraryContext.jsx'
+import { usePlayer } from '../hooks/usePlayer.js'
 
 const uniqueTracks = (rows) => {
   const seen = new Set()
@@ -24,14 +26,16 @@ const uniqueTracks = (rows) => {
 }
 
 /* eslint-disable react/prop-types */
-const SignedInHome = ({ albums, recent, loading, error, name }) => {
+const SignedInHome = ({ albums, recent, loading, error }) => {
   const navigate = useNavigate()
   const { playlists, likeCount } = useLibrary()
+  const { playStatus, playSource } = usePlayer()
   const [section, setSection] = useState('all')
   const quick = [
-    { key: 'liked', title: 'Liked Songs', subtitle: `${likeCount} songs`, image: null, images: [], liked: true, to: '/liked' },
+    { key: 'liked', kind: 'liked', title: 'Liked Songs', subtitle: `${likeCount} songs`, image: null, images: [], liked: true, to: '/liked' },
     ...playlists.slice(0, 3).map((playlist) => ({
       key: playlist.id,
+      kind: 'playlist',
       title: playlist.name,
       subtitle: 'Playlist',
       image: playlist.coverUrl,
@@ -40,6 +44,7 @@ const SignedInHome = ({ albums, recent, loading, error, name }) => {
     })),
     ...albums.slice(0, 4).map((album) => ({
       key: album.id,
+      kind: 'album',
       title: album.title,
       subtitle: album.artist?.name || 'Album',
       image: album.coverUrl,
@@ -47,6 +52,14 @@ const SignedInHome = ({ albums, recent, loading, error, name }) => {
       to: `/album/${album.id}`,
     })),
   ].slice(0, 8)
+
+  const isItemPlaying = (item) => {
+    if (!playStatus || !playSource) return false
+    if (item.kind === 'liked') return playSource.type === 'liked'
+    if (item.kind === 'album') return playSource.type === 'album' && playSource.id === item.key
+    if (item.kind === 'playlist') return playSource.type === 'playlist' && playSource.id === item.key
+    return false
+  }
 
   return (
     <>
@@ -80,26 +93,32 @@ const SignedInHome = ({ albums, recent, loading, error, name }) => {
       {!loading && !error && section !== 'podcasts' ? (
         <>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 mt-4">
-            {quick.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => navigate(item.to)}
-                className="flex items-center gap-3 bg-[#ffffff14] hover:bg-[#ffffff22] rounded overflow-hidden text-left"
-              >
-                {item.liked ? (
-                  <div className="w-14 h-14 bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center text-xl">
-                    ♥
+            {quick.map((item) => {
+              const playing = isItemPlaying(item)
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => navigate(item.to)}
+                  className="flex items-center gap-3 bg-[#ffffff14] hover:bg-[#ffffff22] rounded overflow-hidden text-left"
+                >
+                  {item.liked ? (
+                    <div className="w-14 h-14 bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center text-xl">
+                      ♥
+                    </div>
+                  ) : (
+                    <PlaylistArt coverUrl={item.image} images={item.images} className="w-14 h-14 shrink-0" emptyClassName="text-xl" />
+                  )}
+                  <div className="min-w-0 flex-1 pr-2 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold truncate">{item.title}</p>
+                      <p className="text-xs text-[#b3b3b3] truncate">{item.subtitle}</p>
+                    </div>
+                    {playing ? <PlayingBars className="shrink-0 mr-1" /> : null}
                   </div>
-                ) : (
-                  <PlaylistArt coverUrl={item.image} images={item.images} className="w-14 h-14 shrink-0" emptyClassName="text-xl" />
-                )}
-                <div className="min-w-0 pr-2">
-                  <p className="font-bold truncate">{item.title}</p>
-                  <p className="text-xs text-[#b3b3b3] truncate">{item.subtitle}</p>
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
 
           {recent.length ? (
@@ -114,7 +133,7 @@ const SignedInHome = ({ albums, recent, loading, error, name }) => {
           ) : null}
 
           <div className="mt-8 mb-6">
-            <h1 className="text-2xl font-bold">Made for {name}</h1>
+            <h1 className="text-2xl font-bold">New releases</h1>
             {albums.length === 0 ? (
               <p className="text-[#b3b3b3] mt-3">Albums you can play will show up here.</p>
             ) : (
@@ -180,7 +199,6 @@ const DisplayHome = () => {
         recent={recent}
         loading={loading}
         error={error}
-        name={user?.displayName || 'you'}
       />
     )
   }
@@ -194,7 +212,7 @@ const DisplayHome = () => {
       {!loading && !error ? (
         <>
           <div className="mb-4">
-            <h1 className="my-5 text-2xl font-bold">Featured Charts</h1>
+            <h1 className="my-5 text-2xl font-bold">New releases</h1>
             {albums.length === 0 ? (
               <p className="text-[#a7a7a7]">No albums yet.</p>
             ) : (

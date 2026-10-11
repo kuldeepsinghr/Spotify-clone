@@ -10,6 +10,8 @@ import PlaylistDetails from '../components/PlaylistDetails'
 import { coverImages, usePlaylistColor } from '../components/playlistColor.js'
 import StatusMessage from '../components/StatusMessage'
 import TrackRow from '../components/TrackRow'
+import { TRACK_GRID } from '../components/trackGrid.js'
+import ViewAsMenu from '../components/ViewAsMenu.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLibrary } from '../context/LibraryContext.jsx'
 import { usePlayer } from '../hooks/usePlayer.js'
@@ -26,6 +28,7 @@ const Playlist = () => {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [view, setView] = useState(() => localStorage.getItem('playlistView') || 'list')
 
   const isOwner = user && playlist && (user.id === playlist.owner?.id || user.role === 'admin')
 
@@ -127,7 +130,7 @@ const Playlist = () => {
         {tracks.length > 0 ? (
           <button
             type="button"
-            onClick={() => playTracks(tracks, 0)}
+            onClick={() => playTracks(tracks, 0, { type: 'playlist', id })}
             title="Play"
             className="w-14 h-14 rounded-full bg-[#1db954] flex items-center justify-center"
           >
@@ -175,6 +178,15 @@ const Playlist = () => {
             </div>
           </>
         ) : null}
+        {tracks.length > 0 ? (
+          <ViewAsMenu
+            value={view}
+            onChange={(next) => {
+              setView(next)
+              localStorage.setItem('playlistView', next)
+            }}
+          />
+        ) : null}
       </div>
       </div>
 
@@ -184,13 +196,30 @@ const Playlist = () => {
           body={isOwner ? 'Find songs with Add, or change the name and description.' : 'No songs in this playlist yet.'}
         />
       ) : (
-        <div className="mt-6">
+        <div className="mt-2">
+          <div
+            className={`sticky top-0 z-10 grid items-center gap-4 border-b border-white/10 bg-[#121212]/px-4 pb-2 pt-2 text-xs uppercase tracking-wider text-[#b3b3b3] ${
+              view === 'compact' ? TRACK_GRID.compact : TRACK_GRID.list
+            }`}
+          >
+            <span className="w-4 text-right">#</span>
+            <span>Title</span>
+            {view === 'compact' ? <span>Artist</span> : null}
+            <span>Album</span>
+            <span>Date added</span>
+            <span className="flex w-[4.5rem] justify-end" title="Duration">
+              <img src={assets.clock_icon} alt="" className="w-4 opacity-70" />
+            </span>
+          </div>
           {rows.map((row, index) => (
             <TrackRow
               key={`${row.track.id}-${row.position}`}
               track={row.track}
               index={index}
-              onPlay={() => playTracks(tracks, index)}
+              density={view}
+              showAdded
+              addedAt={row.addedAt}
+              onPlay={() => playTracks(tracks, index, { type: 'playlist', id })}
               onRemove={isOwner ? removeTrack : undefined}
               removeLabel="Remove from playlist"
             />

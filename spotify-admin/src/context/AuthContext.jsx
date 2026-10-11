@@ -21,14 +21,31 @@ export function AuthProvider({ children }) {
       ready,
       signedIn: Boolean(user),
       isAdmin: user?.role === 'admin',
+      isArtist: user?.role === 'artist',
+      emailVerified: Boolean(user?.emailVerifiedAt),
       canPublish: user?.role === 'admin' || user?.role === 'artist',
+      setUser,
       async login(body) {
         const next = await authApi.login(body)
         setUser(next)
         return next
       },
+      async registerArtist(body) {
+        const result = await authApi.registerArtist(body)
+        setUser(result.user)
+        return result
+      },
+      async refreshUser() {
+        const next = await authApi.me()
+        setUser(next)
+        return next
+      },
       async logout() {
         await authApi.logout()
+        setUser(null)
+      },
+      async logoutAll() {
+        await authApi.logoutAll()
         setUser(null)
       },
     }),

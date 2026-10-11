@@ -68,12 +68,15 @@ export const albumsService = {
 
   /** Album with the totals an album page shows: track count and total play time. */
   async get(id: string) {
-    const album = await requireAlbum(id)
-    return { ...album, ...(await tracksService.albumStats(id)) }
+    const album = await albumsRepository.findPublicById(id)
+    if (!album) throw notFound('Album')
+    const stats = await tracksService.albumStats(id)
+    const explicit = await tracksService.hasExplicit(id)
+    return { ...album, ...stats, explicit }
   },
 
   async listTracks(albumId: string, page: PageRequest, viewer: Viewer) {
-    await requireAlbum(albumId)
+    if (!(await albumsRepository.findPublicById(albumId))) throw notFound('Album')
     return tracksService.listByAlbum(albumId, page, viewer)
   },
 

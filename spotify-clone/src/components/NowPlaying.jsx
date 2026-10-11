@@ -15,7 +15,7 @@ const NowPlaying = ({ onClose }) => {
       </div>
       {track ? (
         <>
-          <img src={track.imageUrl} alt="" className="w-full aspect-square object-cover rounded-md bg-[#282828]" />
+          <img src={track.imageUrl || track.album?.coverUrl || ''} alt="" className="w-full aspect-square object-cover rounded-md bg-[#282828]" />
           <p className="mt-4 text-2xl font-bold leading-tight">{track.title}</p>
           {track.artist?.id ? (
             <Link to={`/artist/${track.artist.id}`} className="mt-1 text-[#b3b3b3] hover:underline">

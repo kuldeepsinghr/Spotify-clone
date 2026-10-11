@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { assets } from '../assets/assets'
+import LibrarySortMenu from './LibrarySortMenu'
 import PlaylistArt from './PlaylistArt'
 import { catalogApi } from '../api/catalog.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -14,6 +15,42 @@ const chips = [
   { id: 'artists', label: 'Artists' },
   { id: 'albums', label: 'Albums' },
 ]
+
+const SORT_KEY = 'librarySort'
+const VIEW_KEY = 'libraryView'
+
+const readPref = (key, fallback, allowed) => {
+  try {
+    const value = localStorage.getItem(key)
+    return allowed.includes(value) ? value : fallback
+  } catch {
+    return fallback
+  }
+}
+
+const stamp = (value) => {
+  const time = value ? new Date(value).getTime() : 0
+  return Number.isFinite(time) ? time : 0
+}
+
+const sortItems = (items, sort, getters) => {
+  const copy = [...items]
+  copy.sort((a, b) => {
+    if (sort === 'alphabetical') {
+      return getters.title(a).localeCompare(getters.title(b), undefined, { sensitivity: 'base' })
+    }
+    if (sort === 'creator') {
+      const byCreator = getters.creator(a).localeCompare(getters.creator(b), undefined, { sensitivity: 'base' })
+      if (byCreator !== 0) return byCreator
+      return getters.title(a).localeCompare(getters.title(b), undefined, { sensitivity: 'base' })
+    }
+    if (sort === 'recentlyAdded') {
+      return stamp(getters.added(b)) - stamp(getters.added(a))
+    }
+    return stamp(getters.recent(b)) - stamp(getters.recent(a))
+  })
+  return copy
+}
 
 const GuestSidebar = () => {
   const navigate = useNavigate()
@@ -55,13 +92,83 @@ const GuestSidebar = () => {
 }
 
 /* eslint-disable react/prop-types */
+const LibraryItem = ({ view, round, title, kind, subtitle, pinned, art, onClick }) => {
+  const grid = view === 'grid' || view === 'gridLarge'
+  const compact = view === 'compact'
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-baseline gap-1.5 rounded px-2 py-1.5 text-left text-sm hover:bg-[#ffffff1a]"
+      >
+        {pinned ? <PinIcon /> : null}
+        <span className="min-w-0 truncate">
+          <span className="font-semibold text-white">{title}</span>
+          <span className="text-[#b3b3b3]"> • {kind}</span>
+        </span>
+      </button>
+    )
+  }
+
+  if (grid) {
+    const large = view === 'gridLarge'
+    return (
+      <button type="button" onClick={onClick} className="group w-full rounded p-2 text-left hover:bg-[#ffffff1a]">
+        <div className={`relative ${large ? 'mb-3' : 'mb-2'}`}>{art({ size: large ? 'xl' : 'lg', round })}</div>
+        <p className={`truncate font-semibold ${large ? 'text-base' : 'text-sm'}`}>{title}</p>
+        <p className="mt-0.5 truncate text-xs text-[#b3b3b3]">
+          {pinned ? <PinIcon /> : null}
+          {subtitle}
+        </p>
+      </button>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded p-2 text-left hover:bg-[#ffffff1a]"
+    >
+      {art({ size: 'md', round })}
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold">{title}</p>
+        <p className="truncate text-sm text-[#b3b3b3]">
+          {pinned ? <PinIcon /> : null}
+          {subtitle}
+        </p>
+      </div>
+    </button>
+  )
+}
+
+const sizeClass = {
+  sm: 'h-8 w-8',
+  md: 'h-12 w-12',
+  lg: 'aspect-square w-full',
+  xl: 'aspect-square w-full',
+}
+
+const PinIcon = () => (
+  <svg className="mr-1 inline-block align-[-2px] text-[#1ed760]" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+    <path d="M10.5 1.5a.75.75 0 0 0-1.1-.66L5.9 2.7a.75.75 0 0 0-.4.66v2.3L2.72 7.44a.75.75 0 0 0-.22.53v1.28c0 .2.08.39.22.53l2.72 2.72c.14.14.33.22.53.22h1.28a.75.75 0 0 0 .53-.22l1.78-1.78h2.3a.75.75 0 0 0 .66-.4l1.86-3.5a.75.75 0 0 0-.66-1.1H10.5V1.5zM7.03 12.03 4.97 9.97l-.72.72 1.34 1.34.72-.72zm2.12-1.41L7.38 8.85l3.1-3.1h1.77l-3.1 5.87z" />
+  </svg>
+)
+
 const LibrarySidebar = ({ open, onToggle }) => {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { playlists, likeCount, createPlaylist } = useLibrary()
   const [chip, setChip] = useState('playlists')
   const [query, setQuery] = useState('')
   const [artists, setArtists] = useState([])
   const [albums, setAlbums] = useState([])
+  const [sort, setSort] = useState(() =>
+    readPref(SORT_KEY, 'recents', ['recents', 'recentlyAdded', 'alphabetical', 'creator']),
+  )
+  const [view, setView] = useState(() => readPref(VIEW_KEY, 'list', ['compact', 'list', 'grid', 'gridLarge']))
 
   useEffect(() => {
     let cancelled = false
@@ -86,11 +193,55 @@ const LibrarySidebar = ({ open, onToggle }) => {
     }
   }
 
+  const changeSort = (next) => {
+    setSort(next)
+    localStorage.setItem(SORT_KEY, next)
+  }
+
+  const changeView = (next) => {
+    setView(next)
+    localStorage.setItem(VIEW_KEY, next)
+  }
+
   const needle = query.trim().toLowerCase()
-  const visiblePlaylists = playlists.filter((item) => item.name.toLowerCase().includes(needle))
-  const visibleArtists = artists.filter((item) => item.name.toLowerCase().includes(needle))
-  const visibleAlbums = albums.filter((item) => item.title.toLowerCase().includes(needle))
-  const showLiked = 'liked songs'.includes(needle)
+  const showLiked = 'liked songs'.includes(needle) || !needle
+
+  const visiblePlaylists = useMemo(() => {
+    const filtered = playlists.filter((item) => item.name.toLowerCase().includes(needle))
+    return sortItems(filtered, sort, {
+      title: (item) => item.name || '',
+      creator: (item) => item.owner?.displayName || user?.displayName || '',
+      added: (item) => item.createdAt,
+      recent: (item) => item.updatedAt || item.createdAt,
+    })
+  }, [playlists, needle, sort, user?.displayName])
+
+  const visibleArtists = useMemo(() => {
+    const filtered = artists.filter((item) => item.name.toLowerCase().includes(needle))
+    return sortItems(filtered, sort, {
+      title: (item) => item.name || '',
+      creator: (item) => item.name || '',
+      added: (item) => item.createdAt || item.approvedAt,
+      recent: (item) => item.updatedAt || item.createdAt || item.approvedAt,
+    })
+  }, [artists, needle, sort])
+
+  const visibleAlbums = useMemo(() => {
+    const filtered = albums.filter((item) => item.title.toLowerCase().includes(needle))
+    return sortItems(filtered, sort, {
+      title: (item) => item.title || '',
+      creator: (item) => item.artist?.name || '',
+      added: (item) => item.createdAt || item.releasedAt || item.publishedAt,
+      recent: (item) => item.updatedAt || item.publishedAt || item.createdAt || item.releasedAt,
+    })
+  }, [albums, needle, sort])
+
+  const listClass =
+    view === 'grid'
+      ? 'grid grid-cols-3 gap-1 px-1'
+      : view === 'gridLarge'
+        ? 'grid grid-cols-2 gap-1 px-1'
+        : 'flex flex-col'
 
   if (!open) {
     return (
@@ -159,55 +310,60 @@ const LibrarySidebar = ({ open, onToggle }) => {
         </div>
 
         <div className="px-3 pb-2">
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search in Your Library"
-            className="w-full bg-[#232323] rounded px-3 py-1.5 text-sm outline-none"
-          />
-          <p className="text-xs text-[#b3b3b3] mt-2 px-1">Recents</p>
+          <div className="flex items-center justify-between gap-2">
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search in Your Library"
+              className="min-w-0 flex-1 bg-[#232323] rounded px-3 py-1.5 text-sm outline-none"
+            />
+            <LibrarySortMenu sort={sort} view={view} onSortChange={changeSort} onViewChange={changeView} />
+          </div>
         </div>
 
-        <div className="overflow-auto px-2 pb-4">
+        <div className={`overflow-auto px-2 pb-4 ${listClass}`}>
           {chip === 'playlists' ? (
             <>
               {showLiked ? (
-                <button
-                  type="button"
+                <LibraryItem
+                  view={view}
+                  pinned
+                  title="Liked Songs"
+                  kind="Playlist"
+                  subtitle={`Playlist · ${likeCount} songs`}
                   onClick={() => navigate('/liked')}
-                  className="w-full flex items-center gap-3 p-2 rounded hover:bg-[#ffffff1a] text-left"
-                >
-                  <div className="w-12 h-12 rounded bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center text-xl">
-                    ♥
-                  </div>
-                  <div>
-                    <p className="font-semibold">Liked Songs</p>
-                    <p className="text-sm text-[#b3b3b3]">Playlist · {likeCount} songs</p>
-                  </div>
-                </button>
+                  art={({ size, round }) => (
+                    <div
+                      className={`${sizeClass[size]} ${round ? 'rounded-full' : 'rounded'} bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center shrink-0 ${
+                        size === 'sm' ? 'text-base' : size === 'md' ? 'text-xl' : 'text-4xl'
+                      }`}
+                    >
+                      ♥
+                    </div>
+                  )}
+                />
               ) : null}
               {visiblePlaylists.map((playlist) => (
-                <button
+                <LibraryItem
                   key={playlist.id}
-                  type="button"
+                  view={view}
+                  title={playlist.name}
+                  kind="Playlist"
+                  subtitle={`Playlist · ${playlist.owner?.displayName || user?.displayName || 'You'}`}
                   onClick={() => navigate(`/playlist/${playlist.id}`)}
-                  className="w-full flex items-center gap-3 p-2 rounded hover:bg-[#ffffff1a] text-left"
-                >
-                  <PlaylistArt
-                    coverUrl={playlist.coverUrl}
-                    images={playlist.previewImages}
-                    className="w-12 h-12 rounded shrink-0"
-                    emptyClassName="text-lg"
-                  />
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{playlist.name}</p>
-                    <p className="text-sm text-[#b3b3b3] truncate">Playlist · {playlist.trackCount ?? 0} songs</p>
-                  </div>
-                </button>
+                  art={({ size }) => (
+                    <PlaylistArt
+                      coverUrl={playlist.coverUrl}
+                      images={playlist.previewImages}
+                      className={`${sizeClass[size]} rounded shrink-0`}
+                      emptyClassName={size === 'sm' ? 'text-sm' : size === 'md' ? 'text-lg' : 'text-3xl'}
+                    />
+                  )}
+                />
               ))}
               {playlists.length === 0 ? (
-                <div className="p-4 bg-[#242424] m-2 rounded font-semibold">
+                <div className="col-span-full p-4 bg-[#242424] m-2 rounded font-semibold">
                   <h1>Create your first playlist</h1>
                   <p className="font-light">It is easy, we will help you</p>
                   <button
@@ -224,36 +380,47 @@ const LibrarySidebar = ({ open, onToggle }) => {
 
           {chip === 'artists'
             ? visibleArtists.map((artist) => (
-                <button
+                <LibraryItem
                   key={artist.id}
-                  type="button"
+                  view={view}
+                  round
+                  title={artist.name}
+                  kind="Artist"
+                  subtitle="Artist"
                   onClick={() => navigate(`/artist/${artist.id}`)}
-                  className="w-full flex items-center gap-3 p-2 rounded hover:bg-[#ffffff1a] text-left"
-                >
-                  <img src={artist.imageUrl} alt="" className="w-12 h-12 rounded-full object-cover bg-[#282828]" />
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{artist.name}</p>
-                    <p className="text-sm text-[#b3b3b3]">Artist</p>
-                  </div>
-                </button>
+                  art={({ size }) => (
+                    <img
+                      src={artist.imageUrl}
+                      alt=""
+                      className={`${sizeClass[size]} rounded-full object-cover bg-[#282828] shrink-0`}
+                    />
+                  )}
+                />
               ))
             : null}
 
           {chip === 'albums'
-            ? visibleAlbums.map((album) => (
-                <button
-                  key={album.id}
-                  type="button"
-                  onClick={() => navigate(`/album/${album.id}`)}
-                  className="w-full flex items-center gap-3 p-2 rounded hover:bg-[#ffffff1a] text-left"
-                >
-                  <img src={album.coverUrl} alt="" className="w-12 h-12 rounded object-cover bg-[#282828]" />
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{album.title}</p>
-                    <p className="text-sm text-[#b3b3b3] truncate">Album · {album.artist?.name}</p>
-                  </div>
-                </button>
-              ))
+            ? visibleAlbums.map((album) => {
+                const kind =
+                  album.type === 'single' ? 'Single' : album.type === 'ep' ? 'EP' : 'Album'
+                return (
+                  <LibraryItem
+                    key={album.id}
+                    view={view}
+                    title={album.title}
+                    kind={kind}
+                    subtitle={`${kind} · ${album.artist?.name || 'Unknown'}`}
+                    onClick={() => navigate(`/album/${album.id}`)}
+                    art={({ size }) => (
+                      <img
+                        src={album.coverUrl}
+                        alt=""
+                        className={`${sizeClass[size]} rounded object-cover bg-[#282828] shrink-0`}
+                      />
+                    )}
+                  />
+                )
+              })
             : null}
         </div>
       </div>
@@ -261,6 +428,7 @@ const LibrarySidebar = ({ open, onToggle }) => {
   )
 }
 
+/* eslint-disable react/prop-types */
 const Sidebar = ({ libraryOpen = true, onToggleLibrary }) => {
   const { signedIn } = useAuth()
   return signedIn ? <LibrarySidebar open={libraryOpen} onToggle={onToggleLibrary} /> : <GuestSidebar />

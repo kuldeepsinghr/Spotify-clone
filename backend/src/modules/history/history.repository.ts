@@ -21,8 +21,8 @@ export const historyRepository = {
       orderBy: { playedAt: 'desc' },
     }),
 
-  create: (userId: string, trackId: string) =>
-    prisma.playHistory.create({ data: { userId, trackId }, select: playSelect }),
+  create: (userId: string, trackId: string, msPlayed = 0) =>
+    prisma.playHistory.create({ data: { userId, trackId, msPlayed }, select: playSelect }),
 
   clear: (userId: string) => prisma.playHistory.deleteMany({ where: { userId } }),
 }

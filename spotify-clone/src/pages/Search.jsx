@@ -22,6 +22,7 @@ const Search = () => {
   const [artists, setArtists] = useState(emptySection)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [tab, setTab] = useState('all')
 
   useEffect(() => {
     if (!q) {
@@ -75,7 +76,24 @@ const Search = () => {
         <StatusMessage title={`No results for “${q}”`} body="Try another spelling or a shorter query." />
       ) : (
         <div className="pb-8">
-          {tracks.items.length ? (
+          <div className="flex gap-2 mt-4">
+            {[
+              ['all', 'All'],
+              ['artist', 'Artists'],
+              ['album', 'Albums'],
+              ['track', 'Songs'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`rounded-full px-4 py-1 text-sm ${tab === id ? 'bg-white text-black' : 'bg-[#232323]'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {(tab === 'all' || tab === 'track') && tracks.items.length ? (
             <section className="mt-8">
               <h2 className="text-2xl font-bold mb-3">Songs</h2>
               {tracks.items.map((item, index) => (
@@ -83,7 +101,7 @@ const Search = () => {
                   key={item.id}
                   track={item}
                   index={index}
-                  onPlay={() => playTracks(tracks.items, index)}
+                  onPlay={() => playTracks(tracks.items, index, { type: 'search' })}
                 />
               ))}
               {tracks.nextCursor ? (
@@ -98,7 +116,7 @@ const Search = () => {
             </section>
           ) : null}
 
-          {albums.items.length ? (
+          {(tab === 'all' || tab === 'album') && albums.items.length ? (
             <section className="mt-8">
               <h2 className="text-2xl font-bold mb-3">Albums</h2>
               <div className="flex overflow-auto">
@@ -124,7 +142,7 @@ const Search = () => {
             </section>
           ) : null}
 
-          {artists.items.length ? (
+          {(tab === 'all' || tab === 'artist') && artists.items.length ? (
             <section className="mt-8">
               <h2 className="text-2xl font-bold mb-3">Artists</h2>
               <div className="flex overflow-auto">

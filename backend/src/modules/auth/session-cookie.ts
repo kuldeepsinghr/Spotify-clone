@@ -18,7 +18,12 @@ export const readRefreshCookie = (req: Request): string | undefined => {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-export function sendSession(res: Response, session: Session, status = 200) {
+export function sendSession(
+  res: Response,
+  session: Session,
+  status = 200,
+  extra?: Record<string, unknown>,
+) {
   res.cookie(REFRESH_COOKIE, session.refreshToken, {
     ...cookieOptions,
     expires: session.refreshTokenExpiresAt,
@@ -29,6 +34,7 @@ export function sendSession(res: Response, session: Session, status = 200) {
       user: session.user,
       accessToken: session.accessToken,
       expiresIn: session.accessTokenExpiresIn,
+      ...extra,
     },
     undefined,
     status,

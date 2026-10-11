@@ -49,4 +49,53 @@ export const authRepository = {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     }),
+
+  createOwnedArtist: (data: {
+    name: string
+    slug: string
+    ownerUserId: string
+    contactEmail: string
+  }) =>
+    prisma.artist.create({
+      data: {
+        name: data.name,
+        slug: data.slug,
+        ownerUserId: data.ownerUserId,
+        status: 'draft',
+        private: { create: { contactEmail: data.contactEmail, legalName: '' } },
+      },
+    }),
+
+  findArtistName: (name: string) =>
+    prisma.artist.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
+    }),
+
+  similarArtistNames: (name: string) =>
+    prisma.$queryRaw<{ name: string; verified: boolean }[]>`
+      SELECT name, verified FROM artists
+      WHERE word_similarity(${name}, name) > 0.55
+      ORDER BY word_similarity(${name}, name) DESC
+      LIMIT 5`,
+
+  findSlug: (slug: string) => prisma.artist.findUnique({ where: { slug }, select: { id: true } }),
+
+  createEmailToken: (data: { userId: string; tokenHash: string; expiresAt: Date }) =>
+    prisma.emailVerificationToken.create({ data }),
+
+  findEmailToken: (tokenHash: string) =>
+    prisma.emailVerificationToken.findUnique({ where: { tokenHash } }),
+
+  consumeEmailToken: (id: string) =>
+    prisma.emailVerificationToken.update({ where: { id }, data: { usedAt: new Date() } }),
+
+  createPasswordReset: (data: { userId: string; tokenHash: string; expiresAt: Date }) =>
+    prisma.passwordResetToken.create({ data }),
+
+  findPasswordReset: (tokenHash: string) =>
+    prisma.passwordResetToken.findUnique({ where: { tokenHash } }),
+
+  consumePasswordReset: (id: string) =>
+    prisma.passwordResetToken.update({ where: { id }, data: { usedAt: new Date() } }),
 }

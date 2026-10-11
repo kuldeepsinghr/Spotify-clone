@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto'
 import { env } from '../../config/env.js'
 import type { Actor } from '../../shared/actor.js'
 import { AppError, ErrorCode } from '../../shared/errors.js'
+import { portalLink, sendMail } from '../../shared/mail.js'
 import {
   assertStrongPassword,
   hashPassword,
   verifyAgainstDummy,
   verifyPassword,
 } from '../../shared/password.js'
+import { slugify } from '../../shared/slug.js'
 import { hashRefreshToken, newRefreshToken, signAccessToken } from '../../shared/tokens.js'
 import { normalizeEmail, usersService, type User } from '../users/users.service.js'
 import { authRepository } from './auth.repository.js'
@@ -142,4 +144,128 @@ export const authService = {
     await authRepository.revokeAllForUser(actor.id)
     return issueSession(user)
   },
+
+  async registerArtist(input: {
+    email: string
+    password: string
+    artistName: string
+    confirmSimilarName?: boolean
+  }) {
+    const email = normalizeEmail(input.email)
+    assertStrongPassword(input.password, [email.split('@')[0] ?? '', input.artistName])
+    await assertArtistName(input.artistName, input.confirmSimilarName)
+    const user = await usersService.createAccount({
+      email,
+      displayName: input.artistName,
+      passwordHash: await hashPassword(input.password),
+      role: 'artist',
+    })
+    const slug = await uniqueSlug(slugify(input.artistName))
+    await authRepository.createOwnedArtist({
+      name: input.artistName,
+      slug,
+      ownerUserId: user.id,
+      contactEmail: email,
+    })
+    const devVerificationUrl = await sendVerification(user.id, email, input.artistName)
+    return { session: await issueSession(user), devVerificationUrl }
+  },
+
+  async verifyEmail(token: string) {
+    const stored = await authRepository.findEmailToken(hashRefreshToken(token))
+    if (!stored || stored.usedAt || stored.expiresAt <= new Date()) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'This verification link is invalid or has expired')
+    }
+    await authRepository.consumeEmailToken(stored.id)
+    return usersService.markEmailVerified(stored.userId)
+  },
+
+  async resendVerification(actor: Actor) {
+    const user = await usersService.getProfile(actor.id)
+    if (user.emailVerifiedAt) return { sent: false }
+    await sendVerification(user.id, user.email, user.displayName)
+    return { sent: true }
+  },
+
+  async forgotPassword(email: string) {
+    const credentials = await usersService.findCredentialsByEmail(email)
+    if (!credentials || credentials.isDisabled) return
+    const { token, hash } = newRefreshToken()
+    await authRepository.createPasswordReset({
+      userId: credentials.id,
+      tokenHash: hash,
+      expiresAt: new Date(Date.now() + 30 * 60_000),
+    })
+    const url = portalLink(`/reset-password?token=${token}`)
+    await sendMail({
+      to: credentials.email,
+      subject: 'Reset your password',
+      text: `This link expires in 30 minutes and works once:\n${url}`,
+    })
+  },
+
+  async resetPassword(input: { token: string; password: string }) {
+    const stored = await authRepository.findPasswordReset(hashRefreshToken(input.token))
+    if (!stored || stored.usedAt || stored.expiresAt <= new Date()) {
+      throw new AppError(400, ErrorCode.VALIDATION_ERROR, 'This reset link is invalid or has expired')
+    }
+    const user = await usersService.getProfile(stored.userId)
+    assertStrongPassword(input.password, [user.email.split('@')[0] ?? '', user.displayName])
+    await authRepository.consumePasswordReset(stored.id)
+    await usersService.setPasswordHash(user.id, await hashPassword(input.password))
+    await authRepository.revokeAllForUser(user.id)
+  },
+
+  async changeEmail(actor: Actor, input: { email: string; currentPassword: string }) {
+    const hash = await usersService.getPasswordHash(actor.id)
+    if (!hash || !(await verifyPassword(hash, input.currentPassword))) {
+      throw new AppError(400, ErrorCode.INVALID_CREDENTIALS, 'Current password is incorrect')
+    }
+    const user = await usersService.changeEmail(actor.id, input.email)
+    await sendVerification(user.id, user.email, user.displayName)
+    return user
+  },
+}
+
+async function assertArtistName(name: string, confirmSimilar?: boolean) {
+  const exact = await authRepository.findArtistName(name)
+  if (exact) throw new AppError(409, ErrorCode.ARTIST_NAME_TAKEN, 'An artist with this name already exists')
+  const similar = await authRepository.similarArtistNames(name)
+  if (similar.some((row) => row.verified)) {
+    throw new AppError(
+      409,
+      ErrorCode.NAME_SIMILAR,
+      `That name is too close to a verified artist (${similar.find((row) => row.verified)!.name}). Choose a different name.`,
+    )
+  }
+  if (similar.length > 0 && !confirmSimilar) {
+    throw new AppError(
+      409,
+      ErrorCode.NAME_SIMILAR,
+      `Similar artist names already exist: ${similar.map((row) => row.name).join(', ')}. Confirm to continue.`,
+      { similar: similar.map((row) => row.name) },
+    )
+  }
+}
+
+async function uniqueSlug(base: string) {
+  const taken = await authRepository.findSlug(base)
+  if (!taken) return base
+  return `${base}-${randomUUID().slice(0, 4)}`
+}
+
+async function sendVerification(userId: string, email: string, name: string) {
+  const { token, hash } = newRefreshToken()
+  await authRepository.createEmailToken({
+    userId,
+    tokenHash: hash,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+  })
+  const url = portalLink(`/verify-email?token=${token}`)
+  const delivery = await sendMail({
+    to: email,
+    subject: 'Verify your artist account',
+    text: `Hi ${name}, confirm your email to finish signing up:\n${url}\nThis link expires in 24 hours.`,
+  })
+  return delivery === 'logged' && env.NODE_ENV !== 'production' ? url : undefined
 }

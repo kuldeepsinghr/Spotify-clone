@@ -16,5 +16,10 @@ export function createAuthRouter(limits: ReturnType<typeof createAuthRateLimits>
   router.post('/refresh', requireTrustedOrigin, limits.refresh, authController.refresh)
   router.post('/logout', requireTrustedOrigin, authController.logout)
   router.post('/logout-all', authenticate, authController.logoutAll)
+  router.post('/register-artist', requireTrustedOrigin, limits.register, authController.registerArtist)
+  router.post('/verify-email', limits.email, authController.verifyEmail)
+  router.post('/resend-verification', authenticate, limits.email, authController.resendVerification)
+  router.post('/forgot-password', requireTrustedOrigin, limits.email, authController.forgotPassword)
+  router.post('/reset-password', requireTrustedOrigin, limits.email, authController.resetPassword)
   return router
 }

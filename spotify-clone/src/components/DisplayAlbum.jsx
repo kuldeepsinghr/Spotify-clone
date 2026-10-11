@@ -66,7 +66,7 @@ const DisplayAlbum = () => {
         <div className="flex gap-8 flex-col md:flex-row md:items-end">
           <img src={album.coverUrl} alt="" className="w-48 rounded" />
           <div className="flex flex-col">
-            <p>Album</p>
+            <p className="capitalize">{album.type || 'Album'}{album.explicit ? ' · Explicit' : ''}</p>
             <h2 className="text-5xl font-bold mb-4 md:text-7xl">{album.title}</h2>
             <h4>{album.description}</h4>
             <p className="mt-1">
@@ -81,11 +81,19 @@ const DisplayAlbum = () => {
               {' · '}
               <b>{album.trackCount} songs</b>
               {album.totalDurationMs ? `, ${formatDuration(album.totalDurationMs)}` : null}
+              {album.releasedAt ? ` · ${String(album.releasedAt).slice(0, 4)}` : null}
             </p>
+            {album.copyrightC || album.copyrightP ? (
+              <p className="text-xs text-[#a7a7a7] mt-2">
+                {album.copyrightC ? `© ${album.copyrightC}` : null}
+                {album.copyrightC && album.copyrightP ? ' · ' : null}
+                {album.copyrightP ? `℗ ${album.copyrightP}` : null}
+              </p>
+            ) : null}
             {tracks.length ? (
               <button
                 type="button"
-                onClick={() => playTracks(tracks, 0)}
+                onClick={() => playTracks(tracks, 0, { type: 'album', id })}
                 className="mt-4 w-fit bg-green-500 text-black font-bold rounded-full px-6 py-2"
               >
                 Play
@@ -105,7 +113,7 @@ const DisplayAlbum = () => {
               track={item}
               index={index}
               albumTitle={album.title}
-              onPlay={() => playTracks(tracks, index)}
+              onPlay={() => playTracks(tracks, index, { type: 'album', id })}
             />
           ))}
         </div>

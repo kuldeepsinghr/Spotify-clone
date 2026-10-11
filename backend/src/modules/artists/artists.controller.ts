@@ -16,6 +16,12 @@ export const artistsController = {
     sendData(res, await artistsService.get(id))
   },
 
+  async getBySlug(req: Request, res: Response) {
+    const slug = typeof req.params.slug === 'string' ? req.params.slug : ''
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw badRequest('Invalid profile URL')
+    sendData(res, await artistsService.getBySlug(slug))
+  },
+
   async listAlbums(req: Request, res: Response) {
     const { id } = parse(idParamsSchema, req.params)
     sendPage(res, await artistsService.listAlbums(id, parse(pageQuerySchema, req.query)))

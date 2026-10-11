@@ -1,3 +1,8 @@
+export function apiDetails(error) {
+  const details = error?.response?.data?.error?.details
+  return Array.isArray(details) ? details : []
+}
+
 export function apiMessage(error, fallback = 'Something went wrong') {
   const message = error?.response?.data?.error?.message
   return typeof message === 'string' && message.length > 0 ? message : fallback

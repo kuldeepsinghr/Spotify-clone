@@ -7,12 +7,22 @@ const SongItem = ({ track, tracks, index }) => {
 
   return (
     <div
-      onClick={() => playTracks(tracks?.length ? tracks : [track], index ?? 0)}
-      className="min-w-[180px] p-2 px-3 rounded cursor-pointer hover:bg-[#ffffff26]"
+      onClick={() =>
+        playTracks(
+          tracks?.length ? tracks : [track],
+          index ?? 0,
+          track.album?.id ? { type: 'album', id: track.album.id } : null,
+        )
+      }
+      className="w-[160px] shrink-0 p-3 rounded cursor-pointer hover:bg-[#ffffff26]"
     >
-      <img src={track.imageUrl} alt="" className="rounded" />
-      <p className="font-bold mt-2 mb-1">{track.title}</p>
-      <p className="text-slate-200 text-sm">{track.description || track.artist?.name}</p>
+      <img
+        src={track.imageUrl || track.album?.coverUrl || ''}
+        alt=""
+        className="aspect-square w-full rounded object-cover bg-[#282828]"
+      />
+      <p className="font-bold mt-2 mb-1 truncate">{track.title}</p>
+      <p className="text-[#b3b3b3] text-sm truncate">{track.artist?.name || track.description}</p>
     </div>
   )
 }

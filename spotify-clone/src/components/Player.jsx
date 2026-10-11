@@ -41,9 +41,8 @@ const Player = () => {
   return (
     <>
       <QueuePanel />
-      <div className="bg-black flex flex-col fixed z-10 bottom-0 inset-x-0">
-      <div className="h-24 flex justify-between items-center text-white px-4">
-        <div className="hidden lg:flex items-center gap-4 min-w-[220px]">
+      <div className="bg-black fixed z-10 bottom-0 inset-x-0 h-24 grid grid-cols-[1fr_minmax(0,2fr)_1fr] items-center text-white px-4 gap-4">
+        <div className="hidden lg:flex items-center gap-4 min-w-0">
           {track ? (
             <>
               <button
@@ -52,7 +51,7 @@ const Player = () => {
                 title={nowPlayingOpen ? 'Hide now playing' : 'Now playing view'}
                 className="shrink-0"
               >
-                <img src={track.imageUrl} alt="" className="w-12" />
+                <img src={track.imageUrl || track.album?.coverUrl || ''} alt="" className="w-12 h-12 object-cover" />
               </button>
               <div className="min-w-0">
                 <button type="button" onClick={toggleNowPlaying} className="block max-w-full truncate text-left">
@@ -86,7 +85,7 @@ const Player = () => {
           )}
         </div>
 
-        <div className="flex flex-col items-center gap-1 m-auto">
+        <div className="flex flex-col items-center justify-center gap-1 min-w-0">
           <div className="flex gap-4 items-center">
             <button type="button" onClick={toggleShuffle} title="Shuffle" className={shuffle ? 'opacity-100' : 'opacity-50'}>
               <img src={assets.shuffle_icon} alt="Shuffle" className="w-4" />
@@ -111,20 +110,20 @@ const Player = () => {
               ) : null}
             </button>
           </div>
-          <div className="flex items-center gap-5">
-            <p>{clock(time.currentTime)}</p>
+          <div className="flex items-center gap-3 w-full max-w-[500px]">
+            <p className="text-xs text-[#a7a7a7] w-10 text-right shrink-0">{clock(time.currentTime)}</p>
             <div
               ref={seekBg}
               onClick={seekSong}
-              className="w-[60vw] max-w-[500px] bg-gray-300 rounded-full cursor-pointer"
+              className="flex-1 bg-[#4d4d4d] rounded-full cursor-pointer"
             >
-              <hr ref={seekBar} className="h-1 border-none w-0 bg-green-800 rounded-full" />
+              <hr ref={seekBar} className="h-1 border-none w-0 bg-white rounded-full" />
             </div>
-            <p>{clock(time.totalTime)}</p>
+            <p className="text-xs text-[#a7a7a7] w-10 shrink-0">{clock(time.totalTime)}</p>
           </div>
         </div>
 
-        <div className="hidden lg:flex items-center gap-3 min-w-[220px] justify-end">
+        <div className="hidden lg:flex items-center gap-3 justify-end min-w-0">
           {signedIn ? <NowPlayingToggle open={nowPlayingOpen} onClick={toggleNowPlaying} /> : null}
           <button
             type="button"
@@ -147,13 +146,6 @@ const Player = () => {
             aria-label="Volume"
           />
         </div>
-      </div>
-      {signedIn && playStatus ? (
-        <div className="bg-[#1db954] text-black text-sm px-4 py-1 flex justify-between">
-          <span>Playing on Web Player</span>
-          <span className="font-semibold">{track?.title}</span>
-        </div>
-      ) : null}
       </div>
     </>
   )

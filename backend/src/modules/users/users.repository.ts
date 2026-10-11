@@ -10,6 +10,7 @@ export const userSelect = {
   avatarUrl: true,
   role: true,
   isDisabled: true,
+  emailVerifiedAt: true,
   createdAt: true,
   artist: { select: { id: true, name: true } },
 } satisfies Prisma.UserSelect

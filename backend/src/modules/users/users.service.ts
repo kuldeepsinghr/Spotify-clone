@@ -44,6 +44,28 @@ export const usersService = {
   setPasswordHash: (id: string, passwordHash: string) =>
     usersRepository.update(id, { passwordHash }),
 
+  markEmailVerified: (id: string) =>
+    usersRepository.update(id, { emailVerifiedAt: new Date() }),
+
+  async changeEmail(id: string, email: string) {
+    try {
+      return await usersRepository.update(id, {
+        email: normalizeEmail(email),
+        emailVerifiedAt: null,
+      })
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new AppError(409, ErrorCode.EMAIL_TAKEN, 'An account with this email already exists')
+      }
+      throw error
+    }
+  },
+
   async createAccount(input: {
     email: string
     passwordHash: string

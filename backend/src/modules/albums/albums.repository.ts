@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/db.js'
 import { startAfter } from '../../shared/pagination.js'
 import { escapeLike, type SearchWindow } from '../../shared/search.js'
+import { publicAlbumFilter } from '../../shared/visibility.js'
 
 export const albumSelect = {
   id: true,
@@ -10,6 +11,10 @@ export const albumSelect = {
   bgColor: true,
   coverUrl: true,
   releasedAt: true,
+  type: true,
+  label: true,
+  copyrightC: true,
+  copyrightP: true,
   artist: { select: { id: true, name: true } },
 } satisfies Prisma.AlbumSelect
 
@@ -40,6 +45,7 @@ export interface AlbumChanges {
 export const albumsRepository = {
   list: ({ take, afterId }: ListWindow) =>
     prisma.album.findMany({
+      where: publicAlbumFilter(),
       select: albumSelect,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take,
@@ -48,6 +54,7 @@ export const albumsRepository = {
 
   listOldestFirst: (take: number) =>
     prisma.album.findMany({
+      where: publicAlbumFilter(),
       select: albumSelect,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take,
@@ -55,7 +62,7 @@ export const albumsRepository = {
 
   listByArtist: (artistId: string, { take, afterId }: ListWindow) =>
     prisma.album.findMany({
-      where: { artistId },
+      where: { artistId, ...publicAlbumFilter() },
       select: albumSelect,
       orderBy: [
         { releasedAt: { sort: 'desc', nulls: 'last' } },
@@ -68,6 +75,9 @@ export const albumsRepository = {
 
   findById: (id: string) => prisma.album.findUnique({ where: { id }, select: albumSelect }),
 
+  findPublicById: (id: string) =>
+    prisma.album.findFirst({ where: { id, ...publicAlbumFilter() }, select: albumSelect }),
+
   findByIds: (ids: string[]) =>
     prisma.album.findMany({ where: { id: { in: ids } }, select: albumSelect }),
 
@@ -78,10 +88,14 @@ export const albumsRepository = {
   /** Substring or fuzzy (trigram) match on the title, best match first. Uses albums_title_trgm_idx. */
   async searchIds({ query, take, skip }: SearchWindow) {
     const rows = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT id
-      FROM albums
-      WHERE title ILIKE ${`%${escapeLike(query)}%`} OR ${query} <% title
-      ORDER BY word_similarity(${query}, title) DESC, similarity(title, ${query}) DESC, id
+      SELECT a.id
+      FROM albums a
+      JOIN artists ar ON ar.id = a.artist_id
+      WHERE a.status::text = 'published'
+        AND ar.status::text = 'approved'
+        AND (a.released_at IS NULL OR a.released_at <= CURRENT_DATE)
+        AND (a.title ILIKE ${`%${escapeLike(query)}%`} OR ${query} <% a.title)
+      ORDER BY word_similarity(${query}, a.title) DESC, similarity(a.title, ${query}) DESC, a.id
       LIMIT ${take} OFFSET ${skip}`
     return rows.map((row) => row.id)
   },

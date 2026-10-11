@@ -14,4 +14,5 @@ export const catalogApi = {
     (await api.get(`/v1/artists/${id}/top-tracks`, { params: { limit } })).data.data,
   search: async ({ q, type = 'all', limit = 8, cursor } = {}) =>
     (await api.get('/v1/search', { params: { q, type, limit, cursor } })).data.data,
+  report: async (body) => (await api.post('/v1/reports', body)).data.data,
 }

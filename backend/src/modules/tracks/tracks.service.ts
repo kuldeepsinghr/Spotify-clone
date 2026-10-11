@@ -31,10 +31,12 @@ export type ViewerTrack = Omit<Track, 'audioUrl'> & {
 
 /** Signed-in listeners hear the full track; guests hear the first GUEST_PREVIEW_SECONDS. */
 export function forViewer(track: Track, viewer: Viewer): ViewerTrack {
-  if (viewer) return { ...track, isPreview: false, previewMs: null }
+  const imageUrl = track.imageUrl || track.album?.coverUrl || ''
+  if (viewer) return { ...track, imageUrl, isPreview: false, previewMs: null }
   const audioUrl = previewAudioUrl(track.audioUrl, env.GUEST_PREVIEW_SECONDS)
   return {
     ...track,
+    imageUrl,
     audioUrl,
     isPreview: true,
     previewMs: audioUrl ? Math.min(env.GUEST_PREVIEW_SECONDS * 1000, track.durationMs) : null,
@@ -68,8 +70,12 @@ export const tracksService = {
   },
 
   async get(id: string, viewer: Viewer) {
-    return forViewer(await requireTrack(id), viewer)
+    const track = await tracksRepository.findPublicById(id)
+    if (!track) throw notFound('Track')
+    return forViewer(track, viewer)
   },
+
+  hasExplicit: (albumId: string) => tracksRepository.hasExplicit(albumId),
 
   /** Throws 404 unless the track exists; returns its duration for callers that need it. */
   async requireDuration(id: string) {
@@ -105,8 +111,13 @@ export const tracksService = {
   countByAlbum: (albumId: string) => tracksRepository.countByAlbum(albumId),
 
   async topByArtist(artistId: string, limit: number, viewer: Viewer) {
-    const ids = await tracksRepository.topIdsByArtist(artistId, limit)
-    return inIdOrder(ids, await tracksRepository.findByIds(ids)).map((t) => forViewer(t, viewer))
+    const ranked = await tracksRepository.topIdsByArtist(artistId, limit)
+    const plays = new Map(ranked.map((row) => [row.id, row.plays]))
+    const ids = ranked.map((row) => row.id)
+    return inIdOrder(ids, await tracksRepository.findByIds(ids)).map((track) => ({
+      ...forViewer(track, viewer),
+      playCount: plays.get(track.id) ?? 0,
+    }))
   },
 
   async search(window: SearchWindow, viewer: Viewer) {

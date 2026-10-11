@@ -46,6 +46,12 @@ const schema = z
     CLOUDINARY_NAME: optional,
     CLOUDINARY_API_KEY: optional,
     CLOUDINARY_SECRET_KEY: optional,
+
+    /** Where verification and password-reset links in emails should open. */
+    PORTAL_ORIGIN: z.string().url().default('http://localhost:5174'),
+    SMTP_HOST: optional,
+    SMTP_PORT: z.coerce.number().int().positive().default(1025),
+    SMTP_FROM: z.string().min(3).default('Artist Portal <noreply@localhost>'),
   })
   .transform((value) => ({
     ...value,

@@ -17,6 +17,7 @@ if (configured) {
 
 export interface UploadedMedia {
   url: string
+  publicId: string
   /** Present for audio uploads. */
   durationMs?: number
 }
@@ -66,7 +67,20 @@ export async function uploadMedia(
   }
   return {
     url: result.secure_url,
+    publicId: result.public_id,
     durationMs:
       typeof result.duration === 'number' ? Math.round(result.duration * 1000) : undefined,
+  }
+}
+
+/** Best-effort removal. A missing file or an unconfigured account does not fail the request. */
+export async function destroyMedia(publicId: string, kind: 'image' | 'audio') {
+  if (!configured || !publicId) return
+  try {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: kind === 'audio' ? 'video' : 'image',
+    })
+  } catch {
+    // The database row is the source of truth; a leftover file can be cleaned up later.
   }
 }

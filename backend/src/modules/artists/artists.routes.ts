@@ -6,6 +6,7 @@ import { artistsController } from './artists.controller.js'
 export const artistsRouter = Router()
 
 artistsRouter.get('/', artistsController.list)
+artistsRouter.get('/slug/:slug', artistsController.getBySlug)
 artistsRouter.get('/:id', artistsController.get)
 artistsRouter.get('/:id/albums', artistsController.listAlbums)
 artistsRouter.get('/:id/top-tracks', optionalAuthenticate, artistsController.topTracks)

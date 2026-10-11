@@ -14,3 +14,51 @@
 .toast-in {
   animation: toast-in 180ms ease-out;
 }
+
+.playing-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  width: 14px;
+  height: 12px;
+}
+
+.playing-bars span {
+  display: block;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: #1ed760;
+  animation: playing-bar 1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.playing-bars span:nth-child(1) {
+  animation-duration: 0.85s;
+  animation-delay: 0s;
+}
+
+.playing-bars span:nth-child(2) {
+  animation-duration: 1.05s;
+  animation-delay: -0.2s;
+}
+
+.playing-bars span:nth-child(3) {
+  animation-duration: 0.75s;
+  animation-delay: -0.35s;
+}
+
+.playing-bars span:nth-child(4) {
+  animation-duration: 0.95s;
+  animation-delay: -0.5s;
+}
+
+@keyframes playing-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}

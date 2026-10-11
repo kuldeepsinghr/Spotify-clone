@@ -45,6 +45,8 @@ export function createAuthRateLimits() {
     }),
     register: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 10, keyGenerator: ip }),
     refresh: rateLimit({ ...base, windowMs: 60_000, limit: 30, keyGenerator: ip }),
+    /** Password reset and verification emails. */
+    email: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 5, keyGenerator: ip }),
   }
 }
 

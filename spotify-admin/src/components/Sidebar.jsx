@@ -1,53 +1,45 @@
 import { NavLink } from 'react-router-dom'
-import { assets } from '../assets/assets'
 import { useAuth } from '../context/AuthContext.jsx'
 
-const linkClass =
-  'flex items-center gap-2.5 text-gray-800 bg-white border border-black p-2 pr-[max(8vw,10px)] text-sm font-medium'
+const linkClass = ({ isActive }) =>
+  `block rounded px-3 py-2 text-sm ${isActive ? 'bg-white text-[#003a10] font-semibold' : 'text-white/90 hover:bg-white/10'}`
 
 const Sidebar = () => {
-  const { isAdmin } = useAuth()
+  const { isAdmin, isArtist } = useAuth()
 
   return (
-    <div className="bg-[#003a10] min-h-screen pl-[4vw]">
-      <img src={assets.logo} alt="logo" className="mt-5 w-48 hidden sm:block" />
-      <img src={assets.logo_small} alt="logo" className="mt-5 w-10 mr-5 block sm:hidden" />
-
-      <div className="flex flex-col gap-5 mt-10">
-        <NavLink to="/add-song" className={linkClass}>
-          <img src={assets.add_song} alt="" className="w-5" />
-          <p className="hidden sm:block">Add song</p>
-        </NavLink>
-        <NavLink to="/list-song" className={linkClass}>
-          <img src={assets.song_icon} alt="" className="w-5" />
-          <p className="hidden sm:block">List song</p>
-        </NavLink>
-        <NavLink to="/add-album" className={linkClass}>
-          <img src={assets.add_album} alt="" className="w-5" />
-          <p className="hidden sm:block">Add album</p>
-        </NavLink>
-        <NavLink to="/list-album" className={linkClass}>
-          <img src={assets.album_icon} alt="" className="w-5" />
-          <p className="hidden sm:block">List album</p>
-        </NavLink>
-        {isAdmin ? (
-          <>
-            <NavLink to="/add-artist" className={linkClass}>
-              <img src={assets.add_album} alt="" className="w-5" />
-              <p className="hidden sm:block">Add artist</p>
-            </NavLink>
-            <NavLink to="/list-artist" className={linkClass}>
-              <img src={assets.album_icon} alt="" className="w-5" />
-              <p className="hidden sm:block">List artist</p>
-            </NavLink>
-            <NavLink to="/users" className={linkClass}>
-              <img src={assets.song_icon} alt="" className="w-5" />
-              <p className="hidden sm:block">Users</p>
-            </NavLink>
-          </>
-        ) : null}
+    <aside className="bg-[#003a10] text-white min-h-screen w-56 shrink-0 p-4 flex flex-col gap-6">
+      <div>
+        <p className="text-xs uppercase tracking-wide text-white/60">Studio</p>
+        <p className="text-lg font-semibold">Artist portal</p>
       </div>
-    </div>
+      {isArtist && (
+        <nav className="flex flex-col gap-1">
+          <p className="text-xs uppercase text-white/50 px-3 mb-1">Artist</p>
+          <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
+          <NavLink to="/onboarding" className={linkClass}>Onboarding</NavLink>
+          <NavLink to="/profile" className={linkClass}>Profile</NavLink>
+          <NavLink to="/releases" className={linkClass}>Releases</NavLink>
+          <NavLink to="/stats" className={linkClass}>Statistics</NavLink>
+          <NavLink to="/notifications" className={linkClass}>Notifications</NavLink>
+          <NavLink to="/account" className={linkClass}>Account</NavLink>
+        </nav>
+      )}
+      {isAdmin && (
+        <nav className="flex flex-col gap-1">
+          <p className="text-xs uppercase text-white/50 px-3 mb-1">Admin</p>
+          <NavLink to="/admin" end className={linkClass}>Overview</NavLink>
+          <NavLink to="/admin/profiles" className={linkClass}>Profile review</NavLink>
+          <NavLink to="/admin/releases" className={linkClass}>Release review</NavLink>
+          <NavLink to="/admin/artists" className={linkClass}>Artists</NavLink>
+          <NavLink to="/admin/content" className={linkClass}>Content</NavLink>
+          <NavLink to="/users" className={linkClass}>Users</NavLink>
+          <NavLink to="/admin/genres" className={linkClass}>Genres</NavLink>
+          <NavLink to="/admin/reports" className={linkClass}>Reports</NavLink>
+          <NavLink to="/admin/audit" className={linkClass}>Audit log</NavLink>
+        </nav>
+      )}
+    </aside>
   )
 }
 
